@@ -1,0 +1,53 @@
+name: Kurser og rapport
+
+on:
+  schedule:
+    - cron: "30 18 * * 1-5"   # 20:30 norsk tid, godt etter børsslutt
+    - cron: "0 8 * * 6"       # lørdag: ukesrapport
+  workflow_dispatch:
+
+concurrency:
+  group: momentum-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  eod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Hent kurser
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.fetch_prices
+
+      - name: Ukesrapport
+        if: github.event.schedule == '0 8 * * 6' || github.event_name == 'workflow_dispatch'
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.report
+
+      - name: Commit databasen
+        run: |
+          git config user.name "momentum-bot"
+          git config user.email "actions@github.com"
+          git add data/momentum.db
+          git diff --staged --quiet && echo "ingen endring" && exit 0
+          git commit -m "data: kurser $(date -u +'%Y-%m-%d')"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin ${{ github.ref_name }} && git push && exit 0
+            sleep 5
+          done
+          exit 1
