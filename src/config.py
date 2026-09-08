@@ -43,6 +43,27 @@ PRICE_BATCH_SIZE = 40
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
+# --- Klassifisering (fase 1) -----------------------------------------------
+# Nøkkelen bor kun i miljøet/GitHub-secrets, aldri i repoet.
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_TIMEOUT = 30
+# Haiku er billig nok til å kjøre på hver hendelse som passerer forfilteret.
+KLASSIFISERING_MODELL = os.environ.get("KLASSIFISERING_MODELL", "claude-haiku-4-5-20251001")
+# Sikkerhetsnett mot en feed-eksplosjon som stille koster hundrevis av
+# kroner: maks antall LLM-kall i én kjøring av src.klassifiser.
+KLASSIFISERING_MAKS_KALL = int(os.environ.get("KLASSIFISERING_MAKS_KALL", "200"))
+
+# --- Arkivimport (fase 1, src/backfill_arkiv.py) ---------------------------
+# MFN dokumenterer ikke arkiv-/pagineringsformatet sitt. Dette er et
+# rimelig utgangspunkt basert på at /all/a/<slug> er selskapets egen
+# nyhetsside (se COMPANY_RE i src/sources/mfn.py) — sjekk mot ekte sider og
+# juster URL-malen (og evt. sidetallsparameteren) hvis MFN bruker noe annet.
+MFN_ARKIV_URL_MAL = os.environ.get(
+    "MFN_ARKIV_URL_MAL", "https://mfn.se/all/a/{slug}?page={side}"
+)
+ARKIV_FORSINKELSE_SEK = float(os.environ.get("ARKIV_FORSINKELSE_SEK", "2"))
+
 # --- Børstid --------------------------------------------------------------
 MARKET_OPEN = (9, 0)
 MARKET_CLOSE = (16, 30)

@@ -16,6 +16,44 @@ from src.sources import mfn
 from src.universe import last_universe
 
 
+def lagre_meldinger(con, meldinger: list, dry_run: bool = False) -> int:
+    """Lagrer en liste med mfn.Melding i "nyheter". Delt mellom poll_news
+    (siste 10 minutter) og backfill_arkiv (historikk), slik at ticker-
+    oppslag og umappede-telling ikke driver fra hverandre i to kopier."""
+    last_universe(con)
+    kart = {
+        r["slug"]: (r["ticker"], r["yahoo"], r["navn"])
+        for r in con.execute("SELECT slug, ticker, yahoo, navn FROM selskaper")
+    }
+    na = datetime.now(TZ).isoformat(timespec="seconds")
+    nye = 0
+
+    for m in meldinger:
+        ticker, yahoo, navn = kart.get(m.selskap_slug, (None, None, None))
+        if dry_run:
+            print(f"{m.publisert}  {m.selskap_slug:<22} {ticker or '-':<8} {m.tittel[:60]}")
+            continue
+        cur = con.execute(
+            "INSERT OR IGNORE INTO nyheter "
+            "(url, publisert, hentet, selskap_slug, selskap_navn, tittel, "
+            " sprak, distributor, ticker, yahoo) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                m.url, m.publisert, na, m.selskap_slug,
+                m.selskap_navn or navn, m.tittel, m.sprak,
+                m.distributor, ticker, yahoo,
+            ),
+        )
+        if cur.rowcount:
+            nye += 1
+            if ticker is None:
+                con.execute(
+                    "INSERT INTO umappede (slug, navn, antall, sist_sett) VALUES (?,?,1,?) "
+                    "ON CONFLICT(slug) DO UPDATE SET antall=antall+1, sist_sett=excluded.sist_sett",
+                    (m.selskap_slug, m.selskap_navn, na),
+                )
+    return nye
+
+
 def kjor(dry_run: bool = False, feed: str | None = None) -> int:
     meldinger = mfn.hent(feed)
     if not meldinger:
@@ -23,38 +61,7 @@ def kjor(dry_run: bool = False, feed: str | None = None) -> int:
         return 0
 
     with db.session() as con:
-        last_universe(con)
-        kart = {
-            r["slug"]: (r["ticker"], r["yahoo"], r["navn"])
-            for r in con.execute("SELECT slug, ticker, yahoo, navn FROM selskaper")
-        }
-        na = datetime.now(TZ).isoformat(timespec="seconds")
-        nye = 0
-
-        for m in meldinger:
-            ticker, yahoo, navn = kart.get(m.selskap_slug, (None, None, None))
-            if dry_run:
-                print(f"{m.publisert}  {m.selskap_slug:<22} {ticker or '-':<8} {m.tittel[:60]}")
-                continue
-            cur = con.execute(
-                "INSERT OR IGNORE INTO nyheter "
-                "(url, publisert, hentet, selskap_slug, selskap_navn, tittel, "
-                " sprak, distributor, ticker, yahoo) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (
-                    m.url, m.publisert, na, m.selskap_slug,
-                    m.selskap_navn or navn, m.tittel, m.sprak,
-                    m.distributor, ticker, yahoo,
-                ),
-            )
-            if cur.rowcount:
-                nye += 1
-                if ticker is None:
-                    con.execute(
-                        "INSERT INTO umappede (slug, navn, antall, sist_sett) VALUES (?,?,1,?) "
-                        "ON CONFLICT(slug) DO UPDATE SET antall=antall+1, sist_sett=excluded.sist_sett",
-                        (m.selskap_slug, m.selskap_navn, na),
-                    )
-
+        nye = lagre_meldinger(con, meldinger, dry_run=dry_run)
         if not dry_run:
             db.logg(con, "poll_news", "ok", f"{len(meldinger)} sett, {nye} nye")
     return nye

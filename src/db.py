@@ -67,6 +67,61 @@ CREATE TABLE IF NOT EXISTS kjorelogg (
     status    TEXT NOT NULL,
     detalj    TEXT
 );
+
+-- Fase 1: dedupliserte hendelser. Samme pressemelding havner ofte som flere
+-- rader i "nyheter" (ett per språk, ett per distributør). En hendelse er
+-- klyngen av slike rader som faktisk er samme nyhet. "nyheter" endres aldri;
+-- dette er et lag over, bygget av src/klassifisering/dedup.py og kan bygges
+-- på nytt fra bunnen av når som helst uten å miste noe.
+CREATE TABLE IF NOT EXISTS hendelser (
+    id                INTEGER PRIMARY KEY,
+    kanonisk_nyhet_id INTEGER NOT NULL REFERENCES nyheter(id),
+    selskap_slug      TEXT NOT NULL,
+    ticker            TEXT,
+    publisert         TEXT NOT NULL,   -- tidligste publisert blant medlemmene
+    tittel            TEXT NOT NULL,   -- tittel fra kanonisk_nyhet_id
+    antall_rader      INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_hendelser_slug_publisert ON hendelser(selskap_slug, publisert);
+
+-- Kobling nyhet -> hendelse. En nyhet-rad tilhører nøyaktig én hendelse.
+CREATE TABLE IF NOT EXISTS hendelse_nyheter (
+    hendelse_id INTEGER NOT NULL REFERENCES hendelser(id),
+    nyhet_id    INTEGER NOT NULL UNIQUE REFERENCES nyheter(id),
+    PRIMARY KEY (hendelse_id, nyhet_id)
+);
+
+-- Klassifisering av hendelser: enten regelbasert "rutine"-filtrering eller
+-- LLM-kall. UNIQUE(hendelse_id, prompt_versjon) er selve garantien for at en
+-- hendelse aldri klassifiseres to ganger med samme prompt: bump
+-- PROMPT_VERSJON for å klassifisere på nytt med en endret prompt, og
+-- sammenlign versjonene mot hverandre i stedet for å overskrive historikken.
+-- Fremdrift for src/backfill_arkiv.py. Jobben blir avbrutt (GitHub Actions
+-- har tidsgrenser), så den må vite hvor den slapp per selskap for å kunne
+-- fortsette i stedet for å starte på nytt.
+CREATE TABLE IF NOT EXISTS arkiv_fremdrift (
+    slug         TEXT PRIMARY KEY,
+    siste_side   INTEGER NOT NULL DEFAULT 0,
+    ferdig       INTEGER NOT NULL DEFAULT 0,
+    sist_forsokt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS klassifiseringer (
+    id                      INTEGER PRIMARY KEY,
+    hendelse_id             INTEGER NOT NULL REFERENCES hendelser(id),
+    prompt_versjon          TEXT NOT NULL,
+    modell                  TEXT NOT NULL,      -- 'regelbasert-filter' eller Haiku-modellnavn
+    status                  TEXT NOT NULL,      -- 'rutine' | 'ok' | 'feilet'
+    kategori                TEXT,
+    retning                 TEXT,                -- 'positiv' | 'negativ' | 'nøytral'
+    overraskelse            INTEGER,             -- 1-5
+    sikkerhet               REAL,                -- 0-1
+    begrunnelse             TEXT,
+    tallverdi               REAL,
+    valuta                  TEXT,
+    klassifisert_tidspunkt  TEXT NOT NULL,
+    UNIQUE (hendelse_id, prompt_versjon)
+);
 """
 
 

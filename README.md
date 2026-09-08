@@ -6,12 +6,16 @@ systemet foreslår, du bestemmer.
 Kjører gratis på GitHub Actions med SQLite som database. Ingen server, ingen
 abonnement, ingen Vercel eller Supabase.
 
-## Status: fase 0 — kun innsamling
+## Status: fase 1 — innsamling + klassifisering
 
-Dette repoet gjør i dag én ting: henter pressemeldinger fra MFN hvert 10.
-minutt i børstid og lagrer dem sammen med daglige kurser. Ingen analyse,
-ingen signaler, ingen varsler. Det er meningen. Uten fire til seks uker med
-egne data har du ingenting å teste ideen mot.
+Repoet henter pressemeldinger fra MFN hvert 10. minutt i børstid, lagrer dem
+sammen med daglige kurser (fase 0), dedupliserer dem til hendelser og
+klassifiserer det som ikke er åpenbar rutine med Claude Haiku (fase 1).
+
+Fortsatt **ingen signaler, ingen inn-/utpriser, ingen varsler om handler**.
+Det er meningen — kategorien og begrunnelsen modellen gir er råstoff for
+backtesten i fase 2, ikke et kjøpsråd. Uten reelle data derfra har du
+ingenting å teste ideen mot.
 
 ## Oppsett
 
@@ -26,6 +30,9 @@ python -m src.db              # oppretter data/momentum.db
 python -m src.sources.mfn     # test at parseren ser feeden
 python -m src.poll_news --dry-run
 python -m src.poll_news       # ekte lagring
+
+export ANTHROPIC_API_KEY=sk-ant-...
+python -m src.klassifiser     # dedup -> forfilter -> Claude Haiku
 ```
 
 ### Tester
@@ -35,22 +42,26 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-Testene kjører kun mot en lokal HTML-fixture (`tests/fixtures/mfn_feed.html`)
-og gjør ingen nettverkskall. De dekker begge URL-formene, HTML-entiteter i
-tittelen, at vedleggslenker uten tekst hoppes over, og at en ny polling av
-samme feed ikke gir duplikater.
+Alle tester kjører mot lokale fixtures og mocket HTTP — ingen nettverkskall,
+ingen ekte LLM-kall. De dekker blant annet: begge MFN-URL-formene og
+HTML-entiteter i tittelen, at en ny polling av samme feed ikke gir
+duplikater, dedup på tvers av språk/distributør, at hver regel i
+forfilteret faktisk treffer, JSON-validering og retry i LLM-kallet, og —
+viktigst — at ingen kursdata noensinne havner i det som sendes til
+Anthropic (`tests/test_kjor.py::test_ingen_kursdata_havner_i_llm_kallet`).
 
 På GitHub:
 
-1. Push repoet (privat repo holder — 2000 gratis Actions-minutter i måneden,
-   og dette bruker rundt 400).
+1. Push repoet (privat repo holder — 2000 gratis Actions-minutter i måneden).
 2. Settings → Actions → General → Workflow permissions → **Read and write**.
    Uten dette får ikke jobben lov til å committe databasen tilbake.
-3. Secrets: `MOMENTUM_UA`. Legg også inn `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID`
-   hvis du vil ha varsel når en jobb feiler og ukesrapport lørdag — det er det
-   eneste Telegram brukes til i fase 0. Uten dem skrives meldingene til
-   jobb-loggen i stedet.
-4. Kjør `Poll nyheter` manuelt én gang og sjekk at et data-commit dukker opp.
+3. Secrets: `MOMENTUM_UA` og `ANTHROPIC_API_KEY`. Legg også inn
+   `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID` hvis du vil ha varsel når en jobb
+   feiler og ukesrapport lørdag — det er det eneste Telegram brukes til.
+   Uten dem skrives meldingene til jobb-loggen i stedet.
+4. Valgfri variabel (Settings → Actions → Variables): `KLASSIFISERING_MAKS_KALL`
+   for å endre hvor mange LLM-kall `poll-news.yml` gjør per kjøring (default 200).
+5. Kjør `Poll nyheter` manuelt én gang og sjekk at et data-commit dukker opp.
 
 ## Ticker-mapping
 
@@ -74,21 +85,89 @@ neste gang universet lastes.
 
 | Tabell | Innhold |
 |---|---|
-| `nyheter` | Én rad per pressemelding. Endres aldri i ettertid. |
+| `nyheter` | Én rad per pressemelding, én per språk/distributør. Endres aldri i ettertid (`brodtekst` er unntaket — den fylles inn når en hendelse skal klassifiseres). |
 | `kurser` | Daglig OHLCV per Yahoo-symbol. |
 | `selskaper` | Speiler `universe/tickers.csv`. |
 | `umappede` | Slugs uten ticker, med frekvens. |
 | `kjorelogg` | Siste 500 kjøringer, så du ser om cronen lever. |
+| `hendelser` | Dedupliserte nyheter — én rad per faktisk hendelse, med kanonisk tittel. |
+| `hendelse_nyheter` | Kobling nyhet → hendelse (én nyhet tilhører nøyaktig én hendelse). |
+| `klassifiseringer` | Resultat per hendelse per `PROMPT_VERSJON` — regelbasert (`rutine`) eller Claude Haiku (`ok`/`feilet`). |
+| `arkiv_fremdrift` | Hvor langt `src.backfill_arkiv` er kommet per selskap, for gjenopptakelse. |
 
-`nyheter.hentet` minus `nyheter.publisert` er den viktigste kolonnen i hele
-repoet. Den måler hvor sent du faktisk får vite ting. Er medianen over ti
+`nyheter.hentet` minus `nyheter.publisert` er den viktigste kolonnen i fase
+0. Den måler hvor sent du faktisk får vite ting. Er medianen over ti
 minutter, er ikke en post-nyhet-strategi realistisk med dette oppsettet.
+
+## Klassifisering (fase 1)
+
+Rekkefølgen på hver kjøring av `src.klassifiser` er:
+
+1. **Dedup** (`src/klassifisering/dedup.py`) — MFN publiserer ofte samme sak
+   flere ganger (ett språk, én distributør hver). Rader fra samme selskap
+   innen 10 minutter med tittellikhet over terskelen (token-overlapp +
+   `difflib.SequenceMatcher`, ikke LLM — deterministisk og reproduserbart)
+   slås sammen til én hendelse. Norsk foretrekkes som kanonisk tittel,
+   deretter engelsk.
+2. **Regelbasert forfilter** (`src/klassifisering/regler.py` +
+   `forfilter.py`) — åpenbar rutine (flagging, tilbakekjøpsrapportering,
+   innkalling til generalforsamling, månedsstatistikk, MAR-transaksjoner,
+   tredjeparts IR-analyse) merkes `rutine` uten noe LLM-kall. Reglene er
+   ren data; legg til flere etter hvert som du ser rutine slippe gjennom.
+3. **Claude Haiku** (`src/klassifisering/llm.py`) — kun for det som består
+   forfilteret. Brødteksten hentes fra MFN først her, ikke for alle
+   nyheter. Modellen ser **kun tittel, brødtekst og publiseringstidspunkt —
+   aldri kursdata** (se `bygg_prompt()` — signaturen har rett og slett ikke
+   plass til det, og `tests/test_kjor.py` bekrefter det ende-til-ende).
+   Output valideres mot et fast sett kategorier
+   (`src/klassifisering/kategorier.py`); ugyldig JSON gir ett nytt forsøk,
+   deretter `klassifisering_feilet` — jobben stopper aldri av den grunn.
+
+En hendelse klassifiseres **én gang per `PROMPT_VERSJON`**
+(`UNIQUE(hendelse_id, prompt_versjon)`). Endrer du prompten eller
+kategorilisten, bump `PROMPT_VERSJON` i `kategorier.py` — da klassifiseres
+alt på nytt under den nye versjonen, og du kan sammenligne de to mot
+hverandre i stedet for å miste historikken.
+
+`KLASSIFISERING_MAKS_KALL` (default 200) er et sikkerhetsnett per kjøring:
+resten av hendelsene tas opp igjen neste gang jobben kjører. Kostnaden er
+alltid synlig i `kjorelogg` og i ukesrapporten (antall LLM-kall, estimerte
+tokens, andel filtrert bort).
+
+### Arkivimport
+
+`src/backfill_arkiv.py` henter historikk fra `https://mfn.se/all/a/<slug>`
+for hvert selskap i universet, kjører dedup og klassifisering på resultatet,
+og lagres i den vanlige `nyheter`-tabellen. Kjøres manuelt via workflowen
+**Arkivimport** (`workflow_dispatch`), ikke på cron:
+
+```bash
+python -m src.backfill_arkiv --ar-tilbake 4 --maks-kall-grense 200
+```
+
+Jobben er gjenopptakbar (`arkiv_fremdrift` holder styr på siste side per
+selskap) og stopper seg selv etter `--maks-minutter` (default 45) slik at
+GitHub Actions rekker å committe det som er hentet før tidsgrensen — kjør
+den flere ganger til alle selskaper er `ferdig`.
+
+MFN dokumenterer ikke sitt eget arkiv-/pagineringsformat. URL-malen i
+`MFN_ARKIV_URL_MAL` (`src/config.py`) er et rimelig utgangspunkt basert på
+at `/all/a/<slug>` er selskapets egen nyhetsside — sjekk mot ekte sider
+først, og juster malen (og evt. sidetallsparameteren) om nødvendig.
+
+### Kategorier
+
+Listen i `src/klassifisering/kategorier.py` (`resultat`, `kontrakt_ordre`,
+`oppkjop_fusjon`, `kapitalendring`, `ledelse_styre`, `guiding`,
+`produkt_teknologi`, `juridisk_regulatorisk`, `rating_analyse`, `rutine`,
+`annet`) er et førsteutkast for fase 1. Juster den etter hva som faktisk
+dukker opp i dine egne data — men bump `PROMPT_VERSJON` når du gjør det.
 
 ## Faseplan
 
-- **Fase 0** (uke 1–6) — innsamling. Du er her.
+- **Fase 0** (uke 1–6) — innsamling.
 - **Fase 1** — klassifisering. Regelbasert forfilter, deretter Claude Haiku
-  på det som passerer. Faste kategorier du skriver selv.
+  på det som passerer. Faste kategorier du skriver selv. Du er her.
 - **Fase 2** — backtest mot MFN-arkivet. Trekk fra 29 kr kurtasje hver vei og
   1 % slippage før du konkluderer.
 - **Fase 3** — papirhandel i minst tre måneder, med varsler i samme format

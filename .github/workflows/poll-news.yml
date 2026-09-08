@@ -36,6 +36,15 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m src.poll_news
 
+      - name: Dedupliser og klassifiser
+        env:
+          MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          KLASSIFISERING_MAKS_KALL: ${{ vars.KLASSIFISERING_MAKS_KALL }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.klassifiser
+
       - name: Commit databasen
         run: |
           git config user.name "momentum-bot"

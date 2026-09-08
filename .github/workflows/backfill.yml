@@ -1,0 +1,66 @@
+name: Arkivimport
+
+# Kjøres kun manuelt. Ikke på cron - dette er en tung, langvarig jobb som
+# skal kjøres bevisst og gjentatt til arkivet er ferdig hentet, ikke starte
+# av seg selv. arkiv_fremdrift gjør at hvert kall fortsetter der forrige
+# slapp.
+on:
+  workflow_dispatch:
+    inputs:
+      ar_tilbake:
+        description: "Antall år tilbake (3-5 anbefalt)"
+        default: "4"
+      maks_kall_grense:
+        description: "Maks antall LLM-kall i denne kjøringen"
+        default: "200"
+      forsinkelse:
+        description: "Sekunder mellom hver forespørsel til MFN"
+        default: "2"
+
+concurrency:
+  group: momentum-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    # src.backfill_arkiv stopper seg selv etter 45 min (--maks-minutter),
+    # denne grensen er bare et sikkerhetsnett med litt margin til commit-steget.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Importer arkiv, dedupliser, klassifiser
+        env:
+          MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -m src.backfill_arkiv \
+            --ar-tilbake "${{ inputs.ar_tilbake }}" \
+            --maks-kall-grense "${{ inputs.maks_kall_grense }}" \
+            --forsinkelse "${{ inputs.forsinkelse }}"
+
+      - name: Commit databasen
+        run: |
+          git config user.name "momentum-bot"
+          git config user.email "actions@github.com"
+          git add data/momentum.db
+          git diff --staged --quiet && echo "ingen endring" && exit 0
+          git commit -m "data: arkivimport $(date -u +'%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin ${{ github.ref_name }} && git push && exit 0
+            sleep 5
+          done
+          exit 1
