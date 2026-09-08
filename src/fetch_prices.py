@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 
 from src import db
+from src.config import valider
 from src.notify import send
 from src.sources import prices
 from src.universe import last_universe
@@ -11,6 +12,7 @@ from src.universe import last_universe
 
 def main() -> int:
     try:
+        valider()
         with db.session() as con:
             last_universe(con)
             n = prices.oppdater(con)

@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 from src import db
-from src.config import TZ
+from src.config import TZ, valider
 from src.notify import send
 from src.sources import mfn
 from src.universe import last_universe
@@ -73,6 +73,7 @@ def main() -> int:
     p.add_argument("--feed", help="overstyr feed-URL")
     a = p.parse_args()
     try:
+        valider()
         nye = kjor(dry_run=a.dry_run, feed=a.feed)
     except Exception as e:  # cronen skal ikke dø stille
         print(f"FEIL: {type(e).__name__}: {e}", file=sys.stderr)

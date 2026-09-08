@@ -61,7 +61,16 @@ På GitHub:
    Uten dem skrives meldingene til jobb-loggen i stedet.
 4. Valgfri variabel (Settings → Actions → Variables): `KLASSIFISERING_MAKS_KALL`
    for å endre hvor mange LLM-kall `poll-news.yml` gjør per kjøring (default 200).
-5. Kjør `Poll nyheter` manuelt én gang og sjekk at et data-commit dukker opp.
+5. I Settings → Secrets and variables → Actions kan du også sette:
+   - **Variable** `MFN_FEED_URL` = `https://mfn.se/all/s/nordic` (valgfritt —
+     koden har samme verdi som innebygd standard).
+   - **Secret** `MOMENTUM_UA` = `momentum-varsling/0.1 (personlig prosjekt; <e-post>)`.
+
+   Koden kjører fint uten dem (`src.config.env()` faller tilbake på
+   standardverdiene selv om Actions setter nøkkelen med tom streng når
+   secreten/variabelen ikke finnes), men `MOMENTUM_UA` bør peke på en ekte
+   kontaktadresse siden MFN ikke har noe offentlig API.
+6. Kjør `Poll nyheter` manuelt én gang og sjekk at et data-commit dukker opp.
 
 ## Ticker-mapping
 
