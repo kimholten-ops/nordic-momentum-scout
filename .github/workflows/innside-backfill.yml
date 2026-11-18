@@ -1,0 +1,65 @@
+name: Innside backfill og backtest
+
+# Manuell engangsjobb (Actions -> Run workflow). Henter innsidemeldinger
+# bakover, trekker ut handler med Haiku, mapper selskaper til Yahoo-tickere,
+# henter kurshistorikk og skriver backtest-tabellen til jobbsammendraget.
+on:
+  workflow_dispatch:
+    inputs:
+      maks_llm_kall:
+        description: "Maks LLM-kall til uttrekk"
+        default: "1500"
+
+concurrency:
+  group: momentum-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Hent innsidemeldinger bakover
+        run: python -m src.innside.soek
+
+      - name: Trekk ut handler og lag signaler
+        run: python -m src.innside_kjor --maks-llm-kall "${{ inputs.maks_llm_kall }}"
+
+      - name: Map selskaper til tickere (kun sikre treff)
+        run: python -m scripts.map_innside --skriv
+
+      - name: Hent kurshistorikk
+        run: python -m scripts.hent_kurshistorikk --dager 800
+
+      - name: Backtest
+        run: |
+          python -m src.innside_backtest | tee backtest.txt
+          { echo '### Backtest innsidekjøp'; echo '```'; cat backtest.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit data og univers
+        run: |
+          git config user.name "momentum-bot"
+          git config user.email "actions@github.com"
+          git add data/momentum.db universe/tickers.csv
+          git diff --staged --quiet && echo "ingen endring" && exit 0
+          git commit -m "data: innside backfill $(date -u +'%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin ${{ github.ref_name }} && git push && exit 0
+            sleep 5
+          done
+          exit 1

@@ -1,0 +1,52 @@
+Kesko Oyj - Managers' Transactions (Ari Akseli)
+
+ 2026-11-18 14:20:00
+
+Kesko Oyj - Managers' Transactions
+____________________________________________
+Person subject to the notification requirement
+Name: Ari Akseli
+Position: Other senior manager
+Issuer: Kesko Oyj
+LEI: 743700OX6HSVMCAHPB95
+Notification type: INITIAL NOTIFICATION
+Reference number: 181160/4/6
+____________________________________________
+Transaction date: 2026-11-13
+Outside a trading venue
+Instrument type: SHARE
+ISIN: FI0009000202
+Nature of transaction: SUBSCRIPTION
+Transaction details
+(1): Volume: 7000 Unit price: 18 EUR
+Aggregated transactions (1):
+Volume: 7000 Volume weighted average price: 18 EUR
+____________________________________________
+Transaction date: 2026-11-13
+Venue: NASDAQ HELSINKI LTD (XHEL)
+Instrument type: FINANCIAL INSTRUMENT LINKED TO A SHARE OR A DEBT INSTRUMENT
+ISIN: FI4000625470
+Nature of transaction: DISPOSAL
+
+Transaction details
+(1): Volume: 5000 Unit price: 0.626 EUR
+Aggregated transactions (1):
+Volume: 5000 Volume weighted average price: 0.626 EUR
+____________________________________________
+Transaction date: 2026-11-16
+Venue: NASDAQ HELSINKI LTD (XHEL)
+Instrument type: FINANCIAL INSTRUMENT LINKED TO A SHARE OR A DEBT INSTRUMENT
+ISIN: FI4000625470
+Nature of transaction: DISPOSAL
+Transaction details
+(1): Volume: 36469 Unit price: 0.6375 EUR
+(2): Volume: 3603 Unit price: 0.6375 EUR
+(3): Volume: 6886 Unit price: 0.6375 EUR
+Aggregated transactions (3):
+Volume: 46958 Volume weighted average price: 0.6375 EUR
+
+Further information is available from Lasse Luukkainen, Executive Vice President, Legal and Sustainability, tel. +358 105 322 818.
+
+ 
+
+ Källa Cision

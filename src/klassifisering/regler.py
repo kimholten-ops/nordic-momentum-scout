@@ -38,7 +38,9 @@ RUTINE_MONSTRE: list[tuple[str, str]] = [
     ("manedsstatistikk", r"månedsstatistikk|trafikktall"),
 
     # --- MAR: ledende personers transaksjoner (innsidehandel, rutinemessig
-    # meldeplikt — ikke å forveksle med selve saken som utløste handelen) ----
+    # meldeplikt — ikke å forveksle med selve saken som utløste handelen). Disse
+    # er rutine for NYHETSklassifiseringen, men behandles som data av
+    # src/innside/ — forfilteret her påvirker ikke innsidemodulen) ----
     ("mar_ledelse", r"managers.{0,2} transactions?"),
     ("mar_ledelse", r"persons? discharging managerial responsibilities"),
     ("mar_ledelse", r"transaksjon(?:er)? (?:utført|foretatt) av (?:primærinnsider|ledende ansatt|person med ledelsesansvar)"),

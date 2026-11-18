@@ -29,7 +29,9 @@ COMPANY_RE = re.compile(
     r'<a\b[^>]*?href="' + ORIGIN + r'/all/a/(?P<slug>[^/"?#]+)"[^>]*>(?P<inner>.*?)</a>',
     re.S | re.I,
 )
-TS_RE = re.compile(r"(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})")
+# Dato og klokkeslett står enten sammenhengende ("2026-11-18 15:40:46") eller,
+# fra og med MFNs nyere markup, i hver sin <span> — tillat tagger/blanke imellom.
+TS_RE = re.compile(r"(\d{4}-\d{2}-\d{2})(?:[ T]|(?:\s|<[^>]+>)+)(\d{2}:\d{2}:\d{2})")
 TAG_RE = re.compile(r"<[^>]+>")
 TITLE_ATTR_RE = re.compile(r'\btitle="([^"]*)"', re.I)
 
