@@ -122,6 +122,62 @@ CREATE TABLE IF NOT EXISTS klassifiseringer (
     klassifisert_tidspunkt  TEXT NOT NULL,
     UNIQUE (hendelse_id, prompt_versjon)
 );
+
+-- Innsidehandel (MAR art. 19), se src/innside/. Utledet fra "nyheter", som
+-- aldri endres. innside_behandlet sier hvilke meldinger som er forsøkt
+-- trukket ut (per ekstraksjonsversjon), innsidehandler er selve handlene.
+CREATE TABLE IF NOT EXISTS innside_behandlet (
+    nyhet_id  INTEGER NOT NULL REFERENCES nyheter(id),
+    versjon   TEXT NOT NULL,
+    status    TEXT NOT NULL,     -- 'ok' | 'ingen_handler' | 'trenger_llm' | 'feilet'
+    detalj    TEXT,
+    tidspunkt TEXT NOT NULL,
+    PRIMARY KEY (nyhet_id, versjon)
+);
+
+CREATE TABLE IF NOT EXISTS innsidehandler (
+    id               INTEGER PRIMARY KEY,
+    nyhet_id         INTEGER NOT NULL REFERENCES nyheter(id),
+    linje            INTEGER NOT NULL,
+    versjon          TEXT NOT NULL,
+    kilde            TEXT NOT NULL,      -- 'regel' | 'llm'
+    selskap_slug     TEXT NOT NULL,
+    publisert        TEXT NOT NULL,
+    er_korreksjon    INTEGER NOT NULL DEFAULT 0,
+    gyldig           INTEGER NOT NULL DEFAULT 1,  -- 0 = erstattet av en korreksjon
+    person           TEXT,
+    rolle_tekst      TEXT,
+    rolle            TEXT NOT NULL,      -- ceo|cfo|styreleder|styremedlem|ledelse|naerstaaende|ukjent
+    naerstaaende     INTEGER NOT NULL DEFAULT 0,
+    retning          TEXT NOT NULL,      -- kjop|salg|tildeling|annet
+    instrument       TEXT NOT NULL,      -- aksje|obligasjon|opsjon_derivat|annet
+    antall           REAL,
+    pris             REAL,
+    valuta           TEXT,
+    verdi            REAL,
+    transaksjonsdato TEXT,
+    noekkel          TEXT NOT NULL,      -- samme handel via flere distributører/språk får samme nøkkel
+    UNIQUE (nyhet_id, linje, versjon)
+);
+CREATE INDEX IF NOT EXISTS idx_innside_slug_publisert ON innsidehandler(selskap_slug, publisert);
+CREATE INDEX IF NOT EXISTS idx_innside_noekkel ON innsidehandler(noekkel);
+
+-- Signaler: regelbasert score over innsidekjøp. Ingen kursdata inngår.
+-- UNIQUE(selskap_slug, utlost_av_nyhet, signal_versjon) gjør at et signal
+-- aldri lages to ganger; bump SIGNAL_VERSJON for å teste andre vekter.
+CREATE TABLE IF NOT EXISTS innside_signaler (
+    id               INTEGER PRIMARY KEY,
+    selskap_slug     TEXT NOT NULL,
+    utlost_av_nyhet  INTEGER NOT NULL REFERENCES nyheter(id),
+    publisert        TEXT NOT NULL,
+    signal_versjon   TEXT NOT NULL,
+    score            REAL NOT NULL,
+    antall_personer  INTEGER NOT NULL,
+    verdi_nok        REAL,
+    begrunnelse      TEXT NOT NULL,
+    varslet          INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (selskap_slug, utlost_av_nyhet, signal_versjon)
+);
 """
 
 

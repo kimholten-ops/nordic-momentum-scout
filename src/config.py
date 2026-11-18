@@ -74,6 +74,18 @@ KLASSIFISERING_MAKS_KALL = int(env("KLASSIFISERING_MAKS_KALL", "200"))
 MFN_ARKIV_URL_MAL = env("MFN_ARKIV_URL_MAL", "https://mfn.se/all/a/{slug}?page={side}")
 ARKIV_FORSINKELSE_SEK = float(env("ARKIV_FORSINKELSE_SEK", "2"))
 
+# --- Innsidehandel (src/innside/) -------------------------------------------
+# Grove valutakurser mot NOK. Brukes KUN til terskler i signalscoren, aldri
+# til avkastning — nøyaktighet på noen få prosent spiller ingen rolle.
+INNSIDE_FX_NOK = {
+    "NOK": 1.0, "SEK": float(env("FX_SEK", "1.05")), "DKK": float(env("FX_DKK", "1.55")),
+    "EUR": float(env("FX_EUR", "11.7")), "USD": float(env("FX_USD", "10.0")),
+}
+INNSIDE_MAKS_LLM_KALL = int(env("INNSIDE_MAKS_LLM_KALL", "40"))
+# Telegram-varsel for innsidesignaler er av som standard: i papirhandelsfasen
+# skal signalene logges og måles før de varsler.
+INNSIDE_VARSLE = env("INNSIDE_VARSLE", "0") == "1"
+
 # --- Børstid --------------------------------------------------------------
 MARKET_OPEN = (9, 0)
 MARKET_CLOSE = (16, 30)

@@ -56,3 +56,16 @@ def test_publiseringstidspunkt():
     prefikset, direkte = mfn.parse(_last())
     assert prefikset.publisert == "2024-05-14T08:32:11"
     assert direkte.publisert == "2024-05-14T08:20:05"
+
+
+def test_parser_nyere_markup_med_dato_og_tid_i_egne_spans():
+    """Regresjon: MFN delte tidsstempelet i <span class="compressed-date"> og
+    <span class="compressed-time">; parseren ga da 0 meldinger i live-feeden."""
+    from pathlib import Path
+    from src.sources import mfn
+
+    html = (Path(__file__).parent / "fixtures" / "mfn_feed_2026-11.html").read_text(encoding="utf-8")
+    ms = mfn.parse(html)
+    assert len(ms) >= 10
+    assert all(m.publisert.count("T") == 1 and len(m.publisert) == 19 for m in ms)
+    assert all(m.selskap_slug and m.tittel for m in ms)
