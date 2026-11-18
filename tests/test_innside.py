@@ -206,3 +206,34 @@ def test_signal_bruker_ikke_kursdata():
     import re
     kilde = inspect.getsource(signal)
     assert not re.search(r"(?:FROM|JOIN)\s+kurser", kilde, re.I)
+
+
+# --- Backtest og mapping ---------------------------------------------------
+
+def test_backtest_inngang_er_dagen_etter_publisering(con, monkeypatch):
+    from src import innside_backtest as bt
+    monkeypatch.setattr(bt, "KOSTNAD", 0.0)
+    kurs = (["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"],
+            {"2026-11-09": (90, 91), "2026-11-10": (100, 101), "2026-11-11": (110, 120), "2026-11-12": (120, 130)})
+    # publisert 10. nov (midt på dagen): inngang = åpning 11. nov (110), IKKE 10. nov
+    assert bt.avkastning(kurs, "2026-11-10T09:00:00", 1) == pytest.approx(130 / 110 - 1)
+    assert bt.avkastning(kurs, "2026-11-10T09:00:00", 5) is None  # for kort historikk, ikke imputert
+
+
+def test_backtest_kjor_rapporterer_manglende_kurs(con, monkeypatch):
+    from src import innside_backtest as bt
+    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00", _kjop_tekst("Per", "CEO", 20000, 50, "2026-11-09"))
+    ekstraksjon.kjor(con)
+    r = bt.kjor(con)
+    assert r["kjop_totalt"] == 1 and r["uten_kursdata"] == 1
+
+
+def test_map_velg_krever_nordisk_suffiks_og_navnetreff():
+    from scripts.map_innside import velg
+    kand = [{"symbol": "3MC.SG", "shortname": "Multiconsult ASA"}, {"symbol": "MULTI.OL", "shortname": "MULTICONSULT"}]
+    k, sikker = velg("Multiconsult ASA", kand)
+    assert k["symbol"] == "MULTI.OL" and sikker
+    k, sikker = velg("Helt Annet Navn", [{"symbol": "XYZ.OL", "shortname": "Noe Annet"}])
+    assert k["symbol"] == "XYZ.OL" and not sikker
+    assert velg("Kesko", [{"symbol": "KESKOBU0126.HE", "shortname": "Kesko Oyj MO 26"}])[0] is None

@@ -30,6 +30,13 @@ python -m src.innside.soek      # engangs: hent innsidemeldinger bakover via MFN
 python -m src.innside_kjor      # trekk ut handler, lag signaler (kjører også i poll-workflowen)
 ```
 
+Engangskjøring (Actions → *Innside backfill og backtest*): henter historikk,
+trekker ut handler, mapper selskaper til tickere, henter kurser og skriver
+backtest-tabellen til jobbsammendraget. Backtesten går inn på åpningskursen
+dagen etter publisering og trekker fra kostnader; den er **ikke**
+markedsjustert ennå, så tallene sier om det finnes noe å følge opp, ikke at
+det er en edge.
+
 Signalet er en regelbasert score (rolle, klynge av kjøpere, verdi) over
 åpne aksjekjøp — salg, tildelinger, opsjoner og obligasjoner er lagret men
 teller ikke. Vektene er startverdier som skal kalibreres i backtesten.
