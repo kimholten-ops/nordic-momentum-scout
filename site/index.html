@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Momentum-varsling</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#f7f7f5; --kort:#fff; --tekst:#1c1c1a; --dempet:#6b6b66; --linje:#e4e4df; --aksent:#0f6e56; --pos:#0f6e56; --neg:#b3261e; --gul:#8a6100; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161614; --kort:#1f1f1c; --tekst:#ecece8; --dempet:#9a9a93; --linje:#33332f; --aksent:#5dcaa5; --pos:#5dcaa5; --neg:#f09595; --gul:#e0b44c; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--tekst); }
+  header { padding:20px 20px 0; max-width:1100px; margin:0 auto; }
+  h1 { font-size:20px; margin:0; font-weight:600; }
+  .under { color:var(--dempet); font-size:13px; margin-top:2px; }
+  nav { display:flex; gap:4px; max-width:1100px; margin:16px auto 0; padding:0 20px; border-bottom:1px solid var(--linje); overflow-x:auto; }
+  nav button { background:none; border:0; border-bottom:2px solid transparent; padding:8px 12px; font:inherit; color:var(--dempet); cursor:pointer; white-space:nowrap; }
+  nav button[aria-selected=true] { color:var(--tekst); border-bottom-color:var(--aksent); font-weight:600; }
+  main { max-width:1100px; margin:0 auto; padding:20px; }
+  section[hidden] { display:none; }
+  .kpier { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:20px; }
+  .kpi { background:var(--kort); border:1px solid var(--linje); border-radius:10px; padding:12px 14px; }
+  .kpi .v { font-size:24px; font-weight:600; }
+  .kpi .e { font-size:12px; color:var(--dempet); }
+  h2 { font-size:15px; margin:22px 0 8px; }
+  .tabellramme { background:var(--kort); border:1px solid var(--linje); border-radius:10px; overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13.5px; }
+  th, td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--linje); vertical-align:top; }
+  th { color:var(--dempet); font-weight:500; font-size:12px; white-space:nowrap; }
+  tr:last-child td { border-bottom:0; }
+  td.t, th.t { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .pos { color:var(--pos); } .neg { color:var(--neg); } .dempet { color:var(--dempet); }
+  .merke { display:inline-block; font-size:11.5px; padding:1px 7px; border-radius:99px; border:1px solid var(--linje); color:var(--dempet); }
+  .merke.kjop { color:var(--pos); border-color:var(--pos); } .merke.salg { color:var(--neg); border-color:var(--neg); }
+  .filter { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  input, select { font:inherit; padding:6px 10px; border:1px solid var(--linje); border-radius:8px; background:var(--kort); color:var(--tekst); }
+  .notat { font-size:13px; color:var(--dempet); background:var(--kort); border:1px solid var(--linje); border-left:3px solid var(--gul); border-radius:8px; padding:10px 14px; margin-bottom:16px; }
+  a { color:var(--aksent); text-decoration:none; } a:hover { text-decoration:underline; }
+  .tom { padding:24px; text-align:center; color:var(--dempet); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Momentum-varsling</h1>
+  <div class="under" id="generert">Laster …</div>
+</header>
+<nav role="tablist" id="faner"></nav>
+<main>
+  <section id="oversikt"></section>
+  <section id="handler" hidden></section>
+  <section id="backtest" hidden></section>
+  <section id="nyheter" hidden></section>
+  <section id="drift" hidden></section>
+</main>
+
+<script>
+"use strict";
+const FANER = [["oversikt","Oversikt"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
+const ROLLER = {ceo:"CEO",cfo:"CFO",styreleder:"Styreleder",styremedlem:"Styremedlem",ledelse:"Ledelse",naerstaaende:"Nærstående",ukjent:"Ukjent"};
+const RETNING = {kjop:"Kjøp",salg:"Salg",tildeling:"Tildeling",annet:"Annet"};
+let D = null;
+
+// Alt som kommer fra data.json settes via textContent — aldri innerHTML med data.
+function el(tag, attrs, ...barn) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  for (const b of barn) if (b != null) e.append(b);
+  return e;
+}
+const fmt = (n, d = 0) => n == null ? "–" : Number(n).toLocaleString("nb-NO", {maximumFractionDigits: d});
+const pst = (v) => v == null ? "–" : (v * 100).toLocaleString("nb-NO", {maximumFractionDigits: 1, signDisplay: "exceptZero"}) + " %";
+const dato = (s) => s ? s.slice(0, 10) : "–";
+const klasse = (v) => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
+
+function tabell(kolonner, rader, tom) {
+  if (!rader.length) return el("div", {class: "tabellramme"}, el("div", {class: "tom", text: tom || "Ingen data ennå."}));
+  const thead = el("thead", {}, el("tr", {}, ...kolonner.map(k => el("th", {class: k.t ? "t" : "", text: k.navn}))));
+  const tbody = el("tbody", {}, ...rader.map(r => el("tr", {}, ...kolonner.map(k => {
+    const v = k.vis(r);
+    return v instanceof Node ? el("td", {class: k.t ? "t" : ""}, v) : el("td", {class: (k.t ? "t " : "") + (k.kl ? k.kl(r) : ""), text: v});
+  }))));
+  return el("div", {class: "tabellramme"}, el("table", {}, thead, tbody));
+}
+const kpi = (v, e) => el("div", {class: "kpi"}, el("div", {class: "v", text: v}), el("div", {class: "e", text: e}));
+const merke = (retning) => el("span", {class: "merke " + retning, text: RETNING[retning] || retning});
+
+function oversikt() {
+  const t = D.tall, s = document.getElementById("oversikt");
+  s.replaceChildren();
+  const venter = t.venter_pa_llm;
+  if (venter > 0) s.append(el("div", {class: "notat", text: `${fmt(venter)} innsidemeldinger venter på LLM-uttrekk (typisk norske meldinger). Signalene under dekker derfor bare det som er trukket ut så langt.`}));
+  s.append(el("div", {class: "kpier"},
+    kpi(fmt(t.signaler), "innsidesignaler"), kpi(fmt(t.innsidekjop), "innsidekjøp (aksjer)"),
+    kpi(fmt(t.innsidehandler), "handler totalt"), kpi(fmt(t.nyheter), "nyheter lagret"),
+    kpi(fmt(t.selskaper_i_univers), "selskaper i universet")));
+  s.append(el("h2", {text: `Siste innsidesignaler (score ≥ ${D.signal.terskel}, vindu ${D.signal.vindu_dager} dager)`}));
+  s.append(tabell([
+    {navn: "Publisert", vis: r => dato(r.publisert)},
+    {navn: "Selskap", vis: r => r.selskap},
+    {navn: "Score", t: 1, vis: r => fmt(r.score, 1)},
+    {navn: "Kjøpere", t: 1, vis: r => fmt(r.antall_personer)},
+    {navn: "Verdi (NOK)", t: 1, vis: r => fmt(r.verdi_nok)},
+    {navn: "Begrunnelse", vis: r => r.begrunnelse, kl: () => "dempet"},
+  ], D.signaler.slice(0, 25), "Ingen signaler ennå."));
+  s.append(el("p", {class: "under", text: "Signalene er informasjon, ikke kjøpsråd. Vektene er startverdier som kalibreres i backtesten."}));
+}
+
+function handlerFane() {
+  const s = document.getElementById("handler");
+  s.replaceChildren();
+  const sok = el("input", {type: "search", placeholder: "Søk selskap eller person"});
+  const retn = el("select", {}, el("option", {value: "", text: "Alle retninger"}), ...Object.entries(RETNING).map(([k, v]) => el("option", {value: k, text: v})));
+  retn.value = "kjop";
+  const rolle = el("select", {}, el("option", {value: "", text: "Alle roller"}), ...Object.entries(ROLLER).map(([k, v]) => el("option", {value: k, text: v})));
+  const boks = el("div", {});
+  const tegn = () => {
+    const q = sok.value.trim().toLowerCase();
+    const rader = D.handler.filter(h =>
+      (!retn.value || h.retning === retn.value) && (!rolle.value || h.rolle === rolle.value) &&
+      (!q || (h.selskap || "").toLowerCase().includes(q) || (h.person || "").toLowerCase().includes(q)));
+    boks.replaceChildren(tabell([
+      {navn: "Publisert", vis: r => dato(r.publisert)},
+      {navn: "Selskap", vis: r => r.selskap},
+      {navn: "Person", vis: r => r.person || "–"},
+      {navn: "Rolle", vis: r => (ROLLER[r.rolle] || r.rolle) + (r.naerstaaende && r.rolle !== "naerstaaende" ? " (nærst.)" : "")},
+      {navn: "Retning", vis: r => merke(r.retning)},
+      {navn: "Instrument", vis: r => r.instrument, kl: () => "dempet"},
+      {navn: "Antall", t: 1, vis: r => fmt(r.antall)},
+      {navn: "Pris", t: 1, vis: r => r.pris != null ? `${fmt(r.pris, 2)} ${r.valuta || ""}` : "–"},
+      {navn: "Verdi", t: 1, vis: r => r.verdi != null ? `${fmt(r.verdi)} ${r.valuta || ""}` : "–"},
+      {navn: "Kilde", vis: r => el("a", {href: r.url, target: "_blank", rel: "noopener", text: "MFN"})},
+    ], rader.slice(0, 300), "Ingen treff."));
+  };
+  [sok, retn, rolle].forEach(x => x.addEventListener("input", tegn));
+  s.append(el("div", {class: "filter"}, sok, retn, rolle), boks);
+  tegn();
+}
+
+function backtestFane() {
+  const s = document.getElementById("backtest"), b = D.backtest;
+  s.replaceChildren();
+  s.append(el("div", {class: "notat", text: `Inngang er åpningskursen dagen etter publisering. Kostnad ${(b.kostnad_roundtrip * 100).toFixed(1)} % per runde er trukket fra. Ikke markedsjustert: en positiv snittavkastning kan være markedet og ikke innsiden. ${fmt(b.kjop_totalt)} kjøp totalt, ${fmt(b.uten_kursdata)} uten kursdata.`}));
+  const rader = [];
+  for (const [g, hs] of Object.entries(b.grupper)) for (const [h, st] of Object.entries(hs)) if (st.n) rader.push({g, h, ...st});
+  s.append(tabell([
+    {navn: "Gruppe", vis: r => r.g},
+    {navn: "Horisont", t: 1, vis: r => r.h.replace("d", " dager")},
+    {navn: "N", t: 1, vis: r => fmt(r.n)},
+    {navn: "Treffrate", t: 1, vis: r => r.treff != null ? Math.round(r.treff * 100) + " %" : "–"},
+    {navn: "Snitt netto", t: 1, vis: r => pst(r.snitt), kl: r => klasse(r.snitt) + " t"},
+    {navn: "Median netto", t: 1, vis: r => pst(r.median), kl: r => klasse(r.median) + " t"},
+  ], rader, "Ingen backtest-data ennå. Kjør workflowen «Innside backfill og backtest» først."));
+}
+
+function nyheterFane() {
+  const s = document.getElementById("nyheter");
+  s.replaceChildren(tabell([
+    {navn: "Publisert", vis: r => dato(r.publisert)},
+    {navn: "Selskap", vis: r => r.slug},
+    {navn: "Tittel", vis: r => el("a", {href: r.url, target: "_blank", rel: "noopener", text: r.tittel})},
+    {navn: "Kategori", vis: r => r.kategori},
+    {navn: "Retning", vis: r => r.retning, kl: r => r.retning === "positiv" ? "pos" : r.retning === "negativ" ? "neg" : ""},
+    {navn: "Overr.", t: 1, vis: r => fmt(r.overraskelse)},
+  ], D.nyheter, "Ingen klassifiserte nyheter ennå."));
+}
+
+function driftFane() {
+  const s = document.getElementById("drift");
+  s.replaceChildren(
+    el("div", {class: "kpier"}, kpi(dato(D.tall.siste_nyhet), "siste nyhet"), kpi(dato(D.tall.siste_kurs), "siste kursdato")),
+    tabell([
+      {navn: "Tidspunkt", vis: r => r.tidspunkt.replace("T", " ").slice(0, 16)},
+      {navn: "Jobb", vis: r => r.jobb},
+      {navn: "Status", vis: r => r.status, kl: r => r.status === "ok" ? "pos" : "neg"},
+      {navn: "Detalj", vis: r => r.detalj || "", kl: () => "dempet"},
+    ], D.logg, "Ingen kjøringer logget."));
+}
+
+function visFane(id) {
+  for (const [k] of FANER) document.getElementById(k).hidden = k !== id;
+  for (const b of document.querySelectorAll("nav button")) b.setAttribute("aria-selected", b.dataset.id === id);
+  history.replaceState(null, "", "#" + id);
+}
+
+async function start() {
+  const nav = document.getElementById("faner");
+  for (const [id, navn] of FANER) {
+    const b = el("button", {role: "tab", "data-id": id, text: navn});
+    b.addEventListener("click", () => visFane(id));
+    nav.append(b);
+  }
+  try {
+    const r = await fetch("data.json", {cache: "no-store"});
+    if (!r.ok) throw new Error(r.status);
+    D = await r.json();
+  } catch (e) {
+    document.getElementById("generert").textContent = "Fant ikke data.json — kjør eksporten først.";
+    return;
+  }
+  document.getElementById("generert").textContent = "Oppdatert " + D.generert.replace("T", " ").slice(0, 16);
+  oversikt(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
+  const fra = location.hash.slice(1);
+  visFane(FANER.some(f => f[0] === fra) ? fra : "oversikt");
+}
+start();
+</script>
+</body>
+</html>

@@ -237,3 +237,15 @@ def test_map_velg_krever_nordisk_suffiks_og_navnetreff():
     k, sikker = velg("Helt Annet Navn", [{"symbol": "XYZ.OL", "shortname": "Noe Annet"}])
     assert k["symbol"] == "XYZ.OL" and not sikker
     assert velg("Kesko", [{"symbol": "KESKOBU0126.HE", "shortname": "Kesko Oyj MO 26"}])[0] is None
+
+
+def test_dashboard_eksport_en_signalrad_per_selskap_og_dag(con, monkeypatch):
+    from src import eksport_dashboard as ed
+    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    for i, p in enumerate(["A", "B", "C"]):
+        _nyhet(con, "abc", "Mandatory notification of trade", f"2026-11-10T09:0{i}:00", _kjop_tekst(p, "CEO", 20000, 50, "2026-11-09"), f"u{i}")
+    ekstraksjon.kjor(con)
+    assert signal.bygg_signaler(con) == 3
+    d = ed.bygg(con)
+    assert len(d["signaler"]) == 1 and d["tall"]["signaler"] == 3
+    assert set(d) >= {"generert", "tall", "signaler", "handler", "nyheter", "backtest", "logg"}

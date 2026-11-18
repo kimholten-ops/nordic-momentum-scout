@@ -42,6 +42,15 @@ Signalet er en regelbasert score (rolle, klynge av kjøpere, verdi) over
 teller ikke. Vektene er startverdier som skal kalibreres i backtesten.
 Telegram-varsel er av til du setter repo-variabelen `INNSIDE_VARSLE=1`.
 
+## Dashboard (GitHub Pages)
+
+`site/index.html` er en statisk side som leser `site/data.json`; workflowen
+*Dashboard (GitHub Pages)* bygger json-filen fra databasen etter hver
+datakjøring og publiserer. Slå på under Settings → Pages → Source:
+**GitHub Actions**. Lokalt: `python -m src.eksport_dashboard && python -m http.server -d site`.
+NB: Pages fra privat repo krever betalt GitHub-abonnement, og siden blir
+offentlig tilgjengelig på nettet (den har `noindex`, men ingen innlogging).
+
 ## Oppsett
 
 ```bash
