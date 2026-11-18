@@ -1,54 +1,25 @@
 """Backtest av innsidekjøp mot daglige kurser.
 
-Regler som holder testen ærlig:
-- Innsiden er først kjent når meldingen er PUBLISERT, ikke på transaksjons-
-  dagen. Inngang = åpningskurs første handelsdag ETTER publiseringsdagen.
-- Utgang = sluttkurs h handelsdager etter inngangsdagen (h = 1, 5, 20, 60).
-- Kostnader trekkes fra hver handel (INNSIDE_KOSTNAD_ROUNDTRIP, standard 2,2 %:
-  2 x 29 kr på ~5 000 kr + 1 % slippage på småcap).
-- Handler uten kursdata (umappet selskap, for kort historikk) telles og
-  rapporteres, aldri imputeres.
-Ingen markedsjustering ennå: en oppgang kan være markedet, ikke innsiden. Se
-"gjenstår" i README før tallene brukes til noe annet enn å se om det finnes
-noe å følge opp.
+Inngang/utgang, meravkastning og kostnader er definert i src/marked.py:
+inngang er åpningskursen første handelsdag ETTER publisering, utgang er
+sluttkurs h handelsdager senere, markedet (børsens indeks) trekkes fra, og
+kostnaden avhenger av kurtasje på posisjonsstørrelsen og selskapets
+likviditet. Handler uten kursdata telles, aldri imputeres.
+
+Tabellen viser både netto avkastning (det du faktisk ville tjent) og netto
+MERavkastning (det innsiden tilførte utover markedet). Det er den siste som
+sier om signalet har verdi.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import statistics
-from bisect import bisect_right
-from datetime import datetime
 
-from src import db
-from src.config import env
+from src import db, marked
 from src.innside.signal import SIGNAL_VERSJON
 
 HORISONTER = (1, 5, 20, 60)
-KOSTNAD = float(env("INNSIDE_KOSTNAD_ROUNDTRIP", "0.022"))
-
-
-def _kurser(con) -> dict[str, tuple[list[str], dict[str, tuple[float | None, float | None]]]]:
-    ut: dict[str, tuple[list[str], dict]] = {}
-    for r in con.execute("SELECT yahoo, dato, open, close FROM kurser ORDER BY yahoo, dato"):
-        datoer, rader = ut.setdefault(r["yahoo"], ([], {}))
-        datoer.append(r["dato"])
-        rader[r["dato"]] = (r["open"], r["close"])
-    return ut
-
-
-def avkastning(kurs: tuple[list[str], dict], publisert: str, h: int) -> float | None:
-    """Netto avkastning for én handel, eller None uten dekning."""
-    datoer, rader = kurs
-    pub_dag = publisert[:10]
-    i = bisect_right(datoer, pub_dag)           # første dato STRENGT etter publiseringsdagen
-    if i >= len(datoer) or i + h >= len(datoer):
-        return None
-    inn = rader[datoer[i]][0]
-    ut = rader[datoer[i + h]][1]
-    if not inn or not ut:
-        return None
-    return ut / inn - 1 - KOSTNAD
 
 
 def _hendelser(con) -> list[dict]:
@@ -68,47 +39,52 @@ def _hendelser(con) -> list[dict]:
     return ut
 
 
-def _stat(vals: list[float]) -> dict:
-    if not vals:
+def _stat(netto: list[float], mer: list[float], kost: list[float]) -> dict:
+    if not netto:
         return {"n": 0}
     return {
-        "n": len(vals),
-        "treff": round(sum(v > 0 for v in vals) / len(vals), 3),
-        "snitt": round(statistics.mean(vals), 4),
-        "median": round(statistics.median(vals), 4),
+        "n": len(netto),
+        "treff": round(sum(v > 0 for v in mer) / len(mer), 3),
+        "snitt": round(statistics.mean(netto), 4),
+        "median": round(statistics.median(netto), 4),
+        "mer_snitt": round(statistics.mean(mer), 4),
+        "mer_median": round(statistics.median(mer), 4),
+        "kost_snitt": round(statistics.mean(kost), 4),
     }
 
 
 def kjor(con) -> dict:
-    kurser = _kurser(con)
-    grupper: dict[str, dict[int, list[float]]] = {}
+    kurser = marked.last_kurser(con)
+    grupper: dict[str, dict[int, tuple[list, list, list]]] = {}
     uten_kurs = 0
     hendelser = _hendelser(con)
 
-    def legg(gruppe: str, h: int, v: float) -> None:
-        grupper.setdefault(gruppe, {}).setdefault(h, []).append(v)
+    def legg(gruppe: str, h: int, u: marked.Utfall) -> None:
+        a, b, c = grupper.setdefault(gruppe, {}).setdefault(h, ([], [], []))
+        a.append(u.raa - u.kost)
+        b.append(u.netto_mer)
+        c.append(u.kost)
 
     for e in hendelser:
-        kurs = kurser.get(e["yahoo"] or "")
-        if not kurs:
+        if not e["yahoo"] or e["yahoo"] not in kurser:
             uten_kurs += 1
             continue
+        verdi_nok = marked.til_nok(e["verdi"], e["yahoo"])
         for h in HORISONTER:
-            v = avkastning(kurs, e["publisert"], h)
-            if v is None:
+            u = marked.utfall(kurser, e["yahoo"], e["publisert"], h)
+            if u is None:
                 continue
-            legg("alle_kjop", h, v)
+            legg("alle_kjop", h, u)
             if e["signal"]:
-                legg("signal", h, v)
-            legg(f"rolle:{e['rolle']}", h, v)
-            if e["verdi"] and e["valuta"]:
-                legg("verdi>=100k", h, v) if (e["verdi"] >= 100_000) else legg("verdi<100k", h, v)
+                legg("signal", h, u)
+            legg(f"rolle:{e['rolle']}", h, u)
+            if verdi_nok is not None:
+                legg("verdi>=100k" if verdi_nok >= 100_000 else "verdi<100k", h, u)
 
     return {
         "kjop_totalt": len(hendelser),
         "uten_kursdata": uten_kurs,
-        "kostnad_roundtrip": KOSTNAD,
-        "grupper": {g: {f"{h}d": _stat(v) for h, v in sorted(hs.items())} for g, hs in sorted(grupper.items())},
+        "grupper": {g: {f"{h}d": _stat(*v) for h, v in sorted(hs.items())} for g, hs in sorted(grupper.items())},
     }
 
 
@@ -121,12 +97,14 @@ def main() -> int:
     if a.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))
         return 0
-    print(f"{r['kjop_totalt']} innsidekjøp, {r['uten_kursdata']} uten kursdata, kostnad {r['kostnad_roundtrip']:.1%} per runde\n")
-    print(f"{'gruppe':<18}{'h':>4}{'n':>6}{'treff':>8}{'snitt':>9}{'median':>9}")
+    print(f"{r['kjop_totalt']} innsidekjøp, {r['uten_kursdata']} uten kursdata. "
+          "netto = etter kostnad; mer = netto meravkastning mot børsindeks.\n")
+    print(f"{'gruppe':<18}{'h':>4}{'n':>6}{'treff':>8}{'netto':>9}{'mer':>9}{'mer med.':>10}{'kost':>8}")
     for g, hs in r["grupper"].items():
         for h, s in hs.items():
             if s["n"]:
-                print(f"{g:<18}{h:>4}{s['n']:>6}{s['treff']:>8.0%}{s['snitt']:>9.1%}{s['median']:>9.1%}")
+                print(f"{g:<18}{h:>4}{s['n']:>6}{s['treff']:>8.0%}{s['snitt']:>9.1%}{s['mer_snitt']:>9.1%}"
+                      f"{s['mer_median']:>10.1%}{s['kost_snitt']:>8.1%}")
     return 0
 
 

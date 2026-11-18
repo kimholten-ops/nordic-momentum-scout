@@ -4,7 +4,10 @@ Bruk:
   python -m scripts.map_innside              # skriv forslag (trygg tørrkjøring)
   python -m scripts.map_innside --skriv      # legg SIKRE forslag til i universe/tickers.csv
 
-Et forslag er "sikkert" bare når børssuffikset er nordisk (.OL .ST .CO .HE)
+Rekkefølge: (1) ISIN funnet i meldingsteksten søkes opp direkte — det er
+entydig og regnes som sikkert. (2) Navnesøk med æøå/äö brettet til ASCII
+(Yahoos søk finner ofte ikke "Østlandet", men finner "Ostlandet"). Et
+navnetreff er "sikkert" bare når børssuffikset er nordisk (.OL .ST .CO .HE)
 og første ord i selskapsnavnet også står først i Yahoo-navnet. Alt annet
 skrives til stderr for manuell vurdering — en feil ticker ødelegger
 backtesten stille, så her er det bedre å hoppe over enn å gjette.
@@ -25,8 +28,25 @@ NORDISKE = {".OL": "Oslo Børs", ".ST": "Stockholm", ".CO": "København", ".HE":
 STOPPORD = {"asa", "ab", "abp", "as", "oyj", "plc", "group", "holding", "holdings", "the", "a/s", "publ", "ltd", "corporation", "corp", "nv", "se"}
 
 
+ISIN_RE = re.compile(r"\b(?:NO|SE|FI|DK)[0-9A-Z]{9}[0-9]\b")
+_BRETT = str.maketrans({"æ": "ae", "ø": "o", "å": "a", "ä": "a", "ö": "o", "ü": "u", "é": "e", "ú": "u", "Æ": "AE", "Ø": "O", "Å": "A", "Ä": "A", "Ö": "O"})
+
+
+def brett(tekst: str) -> str:
+    return (tekst or "").translate(_BRETT)
+
+
 def _ord(navn: str) -> list[str]:
-    return [o for o in re.findall(r"[a-zæøåäöü0-9]+", (navn or "").lower()) if o not in STOPPORD]
+    return [o for o in re.findall(r"[a-z0-9]+", brett(navn).lower()) if o not in STOPPORD]
+
+
+def isiner(tekster: list[str]) -> list[str]:
+    sett: list[str] = []
+    for t in tekster:
+        for m in ISIN_RE.findall(t or ""):
+            if m not in sett:
+                sett.append(m)
+    return sett
 
 
 def velg(navn: str, kandidater: list[dict]) -> tuple[dict | None, bool]:
@@ -66,12 +86,25 @@ def main() -> int:
     sikre, usikre = [], []
     for r in rader:
         navn = r["navn"] or r["slug"].replace("-", " ")
+        with db.session() as con:
+            tekster = [
+                x[0] for x in con.execute(
+                    "SELECT brodtekst FROM nyheter WHERE selskap_slug = ? AND brodtekst IS NOT NULL LIMIT 20",
+                    (r["slug"],),
+                )
+            ]
+        k, sikker = None, False
         try:
-            kand = yf.Search(navn, max_results=8).quotes
+            for isin in isiner(tekster)[:3]:
+                k, _ = velg("", yf.Search(isin, max_results=5).quotes)
+                if k:
+                    sikker = True
+                    break
+            if not k:
+                k, sikker = velg(navn, yf.Search(brett(navn), max_results=8).quotes)
         except Exception as e:
             print(f"søk feilet for {navn}: {type(e).__name__}", file=sys.stderr)
             continue
-        k, sikker = velg(navn, kand)
         time.sleep(0.5)
         if not k:
             usikre.append((r["slug"], navn, None))

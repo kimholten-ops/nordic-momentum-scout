@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS innsidehandler (
     valuta           TEXT,
     verdi            REAL,
     transaksjonsdato TEXT,
+    beholdning_etter REAL,           -- aksjer eid etter handelen (når oppgitt)
     noekkel          TEXT NOT NULL,      -- samme handel via flere distributører/språk får samme nøkkel
     UNIQUE (nyhet_id, linje, versjon)
 );
@@ -178,6 +179,29 @@ CREATE TABLE IF NOT EXISTS innside_signaler (
     varslet          INTEGER NOT NULL DEFAULT 0,
     UNIQUE (selskap_slug, utlost_av_nyhet, signal_versjon)
 );
+
+-- Hjernen (src/hjerne/). prediksjoner/trades/egenkapital regnes på nytt
+-- ved hver kjøring (walk-forward fra rådata); hjerne_forslag er varige
+-- fordi de varsles, og varslet-flagget hindrer dobbeltvarsel.
+CREATE TABLE IF NOT EXISTS hjerne_prediksjoner (
+    nokkel     TEXT PRIMARY KEY,
+    kilde      TEXT, slug TEXT, navn TEXT, publisert TEXT, inn_dato TEXT,
+    pred       REAL, sikkerhet REAL, valgt INTEGER, utfall REAL, trent_n INTEGER,
+    bidrag     TEXT, beskrivelse TEXT
+);
+CREATE TABLE IF NOT EXISTS hjerne_trades (
+    id INTEGER PRIMARY KEY, nokkel TEXT, slug TEXT, navn TEXT, yahoo TEXT,
+    inn_dato TEXT, inn REAL, stopp REAL, plan_ut_dato TEXT, ut_dato TEXT, ut REAL,
+    status TEXT, raa REAL, marked REAL, kost REAL, netto REAL, pnl_kr REAL, pred REAL
+);
+CREATE TABLE IF NOT EXISTS hjerne_egenkapital (dato TEXT PRIMARY KEY, verdi REAL);
+CREATE TABLE IF NOT EXISTS hjerne_forslag (
+    nokkel TEXT PRIMARY KEY, opprettet TEXT, kilde TEXT, slug TEXT, navn TEXT, yahoo TEXT,
+    publisert TEXT, pred REAL, sikkerhet REAL, siste_kurs REAL, limit_pris REAL, stopp REAL,
+    inn_dato TEXT, ut_dato TEXT, beskrivelse TEXT, bidrag TEXT, anbefalt INTEGER, varslet INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS hjerne_status (id INTEGER PRIMARY KEY CHECK (id = 1), oppdatert TEXT, data TEXT);
+
 """
 
 
@@ -189,9 +213,22 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     return con
 
 
+# Kolonner lagt til etter at tabellen fantes. CREATE TABLE IF NOT EXISTS
+# endrer ikke eksisterende tabeller, så de legges til her.
+MIGRERINGER = [("innsidehandler", "beholdning_etter", "REAL")]
+
+
+def _migrer(con: sqlite3.Connection) -> None:
+    for tabell, kolonne, typ in MIGRERINGER:
+        finnes = {r[1] for r in con.execute(f"PRAGMA table_info({tabell})")}
+        if finnes and kolonne not in finnes:
+            con.execute(f"ALTER TABLE {tabell} ADD COLUMN {kolonne} {typ}")
+
+
 def init(path: Path | None = None) -> None:
     with connect(path) as con:
         con.executescript(SCHEMA)
+        _migrer(con)
 
 
 @contextmanager
@@ -199,6 +236,7 @@ def session(path: Path | None = None):
     con = connect(path)
     try:
         con.executescript(SCHEMA)
+        _migrer(con)
         yield con
         con.commit()
     finally:

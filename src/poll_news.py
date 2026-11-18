@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 from src import db
-from src.config import TZ, valider
+from src.config import MFN_FEED_URL, MFN_POLL_LIMIT, TZ, valider
 from src.notify import send
 from src.sources import mfn
 from src.universe import last_universe
@@ -55,9 +55,15 @@ def lagre_meldinger(con, meldinger: list, dry_run: bool = False) -> int:
 
 
 def kjor(dry_run: bool = False, feed: str | None = None) -> int:
-    meldinger = mfn.hent(feed)
+    url = feed or MFN_FEED_URL
+    if MFN_POLL_LIMIT and "limit=" not in url:
+        url += ("&" if "?" in url else "?") + f"limit={MFN_POLL_LIMIT}"
+    meldinger = mfn.hent(url)
     if not meldinger:
         print("ADVARSEL: null meldinger parset. Feeden eller markupen kan ha endret seg.")
+        if not dry_run:
+            with db.session() as con:
+                db.logg(con, "poll_news", "tom", "0 meldinger parset — sjekk MFN-markup")
         return 0
 
     with db.session() as con:

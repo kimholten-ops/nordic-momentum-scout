@@ -32,6 +32,17 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m src.fetch_prices
 
+      - name: Hjerne (lær, simuler, foreslå, varsle)
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WEBPUSH_VAPID_PRIVATE: ${{ secrets.WEBPUSH_VAPID_PRIVATE }}
+          WEBPUSH_SUBSCRIPTIONS: ${{ secrets.WEBPUSH_SUBSCRIPTIONS }}
+          WEBPUSH_KONTAKT: ${{ vars.WEBPUSH_KONTAKT }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          HJERNE_VARSLE: ${{ vars.HJERNE_VARSLE || '1' }}
+        run: python -m src.hjerne_kjor
+
       - name: Ukesrapport
         if: github.event.schedule == '0 8 * * 6' || github.event_name == 'workflow_dispatch'
         env:

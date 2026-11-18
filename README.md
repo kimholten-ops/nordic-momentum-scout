@@ -51,6 +51,54 @@ datakjøring og publiserer. Slå på under Settings → Pages → Source:
 NB: Pages fra privat repo krever betalt GitHub-abonnement, og siden blir
 offentlig tilgjengelig på nettet (den har `noindex`, men ingen innlogging).
 
+## Hjernen (src/hjerne/)
+
+Lærer av utfallet til hver hendelse — innsidekjøp og (når nyhetsklassifiseringen
+har data) klassifiserte nyheter — og simulerer handler med det den har lært.
+
+- **Mål:** netto meravkastning over `HJERNE_HORISONT` handelsdager (standard 5):
+  aksjens avkastning fra åpning dagen etter publisering, minus børsindeksen,
+  minus kurtasje og slippage.
+- **Modell:** additiv modell med krymping (`HJERNE_PRIOR_STYRKE`) og tidsvekt
+  (`HJERNE_HALVERINGSTID` dager), over grove egenskaper: rolle, antall kjøpere
+  siste 30 dager, verdi, andel av beholdningen, likviditet, 20-dagers momentum,
+  børs, og for nyheter kategori/retning/overraskelse.
+- **Walk-forward:** hver dag trenes modellen bare på utfall som var kjent før
+  den dagen. Den lærer av alle hendelser, ikke bare dem den handlet.
+- **Papirhandel:** åpner når forventet verdi ≥ `HJERNE_MIN_EDGE` og sikkerhet ≥
+  `HJERNE_MIN_SIKKERHET`; stopp = inngang − `HJERNE_STOPP_ATR` × ATR20;
+  tidsutgang etter horisonten; maks `HJERNE_MAKS_APNE` åpne av `HJERNE_KAPITAL`.
+- **Forslag:** hendelser uten inngangsdag ennå blir forslag med inngang (maks
+  limit), stopp og utgangsdato, og varsles én gang.
+- **Lærer den noe?** Dashboardets «Hjerne»-fane viser forventet mot faktisk
+  utfall i fem grupper og rangkorrelasjonen. Den må bli tydelig positiv før
+  forslagene er verdt noe.
+
+Kjøres i «Kurser og rapport» (kveld) og «Poll nyheter». Alt kan overstyres
+med repo-variabler med samme navn som i `src/config.py`.
+
+## Varsler på telefonen
+
+**Telegram** (anbefalt, enklest):
+1. Telegram → @BotFather → `/newbot` → kopier tokenet.
+2. Send en melding til den nye boten.
+3. Secret `TELEGRAM_TOKEN` = tokenet. Kjør workflowen **Varslingstest** — den
+   skriver ut chat-id-en din.
+4. Secret `TELEGRAM_CHAT_ID` = chat-id-en. Kjør **Varslingstest** igjen; du
+   skal få en testmelding.
+
+**Web push via dashboard-appen** (valgfritt, i tillegg):
+1. Lokalt: `python -m scripts.lag_vapid`. Secret `WEBPUSH_VAPID_PRIVATE` og
+   variabel `WEBPUSH_VAPID_PUBLIC`. Variabel `WEBPUSH_KONTAKT` = `mailto:deg@…`,
+   og `DASHBOARD_URL` = adressen til dashboardet.
+2. Kjør «Dashboard (GitHub Pages)». Åpne dashboardet på telefonen. iPhone:
+   Del → «Legg til på Hjem-skjerm» og åpne appen derfra (krever iOS 16.4+).
+3. Trykk 🔔 Varsler → tillat → kopier teksten → secret `WEBPUSH_SUBSCRIPTIONS`.
+   Flere enheter: `[ {...}, {...} ]`.
+4. Kjør «Varslingstest».
+
+Web push brukes bare for kjøpsforslag; Telegram får også feil og ukesrapport.
+
 ## Oppsett
 
 ```bash

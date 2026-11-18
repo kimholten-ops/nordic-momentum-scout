@@ -33,7 +33,9 @@ SYSTEM_PROMPT = (
     '  "antall": antall enheter som tall, ellers null\n'
     '  "pris": pris per enhet som tall, ellers null\n'
     '  "valuta": valutakode (NOK, SEK, EUR ...), ellers null\n'
-    '  "dato": transaksjonsdato YYYY-MM-DD, ellers null\n\n'
+    '  "dato": transaksjonsdato YYYY-MM-DD, ellers null\n'
+    '  "beholdning_etter": antall aksjer personen (inkl. nærstående) eier ETTER handelen, '
+    'hvis det står i teksten, ellers null\n\n'
     "Står ikke tallene i teksten (f.eks. kun i et vedlegg), skal de være null. "
     "Finn aldri på tall. Handler meldingen ikke om en transaksjon, svar "
     '{"handler": []}.'
@@ -76,6 +78,7 @@ def _valider(data: dict) -> list[Handel]:
                 pris=_tall(h.get("pris")),
                 valuta=(h.get("valuta") or None),
                 transaksjonsdato=str(dato)[:10] if dato else None,
+                beholdning_etter=_tall(h.get("beholdning_etter")),
             )
         )
     return ut
@@ -93,7 +96,7 @@ def _kall_api(prompt: str, modell: str) -> str:
         },
         json={
             "model": modell,
-            "max_tokens": 900,
+            "max_tokens": 4000,  # mange transaksjoner i én melding ga avkuttet JSON ved 900
             "system": SYSTEM_PROMPT,
             "messages": [{"role": "user", "content": prompt}],
         },

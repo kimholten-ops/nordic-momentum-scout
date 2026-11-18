@@ -116,20 +116,23 @@ def ikke_varslede(con: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def formater_varsel(con: sqlite3.Connection, s: sqlite3.Row) -> str:
+    from src.notify import esc
+
     h = con.execute(
         "SELECT h.*, n.selskap_navn FROM innsidehandler h JOIN nyheter n ON n.id = h.nyhet_id "
         "WHERE h.nyhet_id = ? AND h.retning = 'kjop' AND h.instrument = 'aksje' AND h.gyldig = 1 ORDER BY h.linje LIMIT 1",
         (s["utlost_av_nyhet"],),
     ).fetchone()
     navn = (h["selskap_navn"] if h and h["selskap_navn"] else s["selskap_slug"])
+    tall = lambda v: f"{v:,.0f}".replace(",", " ")
     linje = ""
     if h:
-        pris = f" à {h['pris']:g} {h['valuta']}" if h["pris"] and h["valuta"] else ""
-        antall = f"{h['antall']:,.0f}".replace(",", " ") if h["antall"] else "?"
-        linje = f"\n{h['person'] or 'ukjent'} ({h['rolle_tekst'] or h['rolle']}) kjøpte {antall} aksjer{pris}"
+        pris = f" à {h['pris']:g} {esc(h['valuta'])}" if h["pris"] and h["valuta"] else ""
+        antall = tall(h["antall"]) if h["antall"] else "?"
+        linje = f"\n{esc(h['person'] or 'ukjent')} ({esc(h['rolle_tekst'] or h['rolle'])}) kjøpte {antall} aksjer{pris}"
     return (
-        f"🔎 <b>Innsidekjøp: {navn}</b> (score {s['score']:g}){linje}\n"
-        f"{s['antall_personer']} kjøper(e) siste {VINDU_DAGER} dager, ~{s['verdi_nok'] or 0:,.0f} NOK totalt.\n"
-        f"<i>{s['begrunnelse']}</i>\n"
-        "Informasjon, ikke kjøpsråd — ingen inn-/utpris før backtest."
-    ).replace(",", " ")
+        f"🔎 <b>Innsidekjøp: {esc(navn)}</b> (score {s['score']:g}){linje}\n"
+        f"{s['antall_personer']} kjøper(e) siste {VINDU_DAGER} dager, ~{tall(s['verdi_nok'] or 0)} NOK totalt.\n"
+        f"<i>{esc(s['begrunnelse'])}</i>\n"
+        "Informasjon, ikke kjøpsråd."
+    )

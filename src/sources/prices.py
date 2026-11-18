@@ -9,7 +9,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date, timedelta
 
-from src.config import PRICE_BATCH_SIZE, PRICE_LOOKBACK_DAYS
+from src.config import INDEKSER, KURSHISTORIKK_DAGER, PRICE_BATCH_SIZE, PRICE_LOOKBACK_DAYS
 
 
 def _batcher(seq: list[str], n: int):
@@ -17,22 +17,20 @@ def _batcher(seq: list[str], n: int):
         yield seq[i : i + n]
 
 
-def oppdater(con: sqlite3.Connection, dager: int = PRICE_LOOKBACK_DAYS) -> int:
-    """Henter siste N dager for hele det aktive universet. Idempotent."""
-    import yfinance as yf
-
-    symboler = [
+def _symboler(con: sqlite3.Connection) -> list[str]:
+    aksjer = [
         r["yahoo"]
         for r in con.execute(
             "SELECT DISTINCT yahoo FROM selskaper WHERE aktiv=1 AND yahoo IS NOT NULL AND yahoo<>''"
         )
     ]
-    if not symboler:
-        return 0
+    return aksjer + [i for i in INDEKSER.values() if i not in aksjer]
 
-    start = (date.today() - timedelta(days=dager)).isoformat()
+
+def _last_ned(con: sqlite3.Connection, symboler: list[str], start: str) -> int:
+    import yfinance as yf
+
     rader = 0
-
     for gruppe in _batcher(symboler, PRICE_BATCH_SIZE):
         df = yf.download(
             gruppe,
@@ -50,6 +48,8 @@ def oppdater(con: sqlite3.Connection, dager: int = PRICE_LOOKBACK_DAYS) -> int:
                 sub = df[sym] if len(gruppe) > 1 else df
             except KeyError:
                 continue
+            if hasattr(sub.columns, "nlevels") and sub.columns.nlevels > 1:
+                sub = sub.droplevel(0, axis=1) if sym in sub.columns.get_level_values(0) else sub
             sub = sub.dropna(how="all")
             for idx, rad in sub.iterrows():
                 if rad.isna().all():
@@ -68,6 +68,26 @@ def oppdater(con: sqlite3.Connection, dager: int = PRICE_LOOKBACK_DAYS) -> int:
                     ),
                 )
                 rader += 1
+    return rader
+
+
+def oppdater(con: sqlite3.Connection, dager: int = PRICE_LOOKBACK_DAYS) -> int:
+    """Henter siste N dager for hele det aktive universet + markedsindeksene.
+    Symboler med under 60 kursdager (nylig mappet) får full historikk, slik at
+    backtest og hjerne kan bruke dem med en gang. Idempotent."""
+    symboler = _symboler(con)
+    if not symboler:
+        return 0
+    antall = {
+        r["yahoo"]: r["n"] for r in con.execute("SELECT yahoo, COUNT(*) n FROM kurser GROUP BY yahoo")
+    }
+    korte = [s for s in symboler if antall.get(s, 0) < 60]
+    lange = [s for s in symboler if s not in korte]
+    rader = 0
+    if lange:
+        rader += _last_ned(con, lange, (date.today() - timedelta(days=dager)).isoformat())
+    if korte:
+        rader += _last_ned(con, korte, (date.today() - timedelta(days=max(dager, KURSHISTORIKK_DAGER))).isoformat())
     return rader
 
 

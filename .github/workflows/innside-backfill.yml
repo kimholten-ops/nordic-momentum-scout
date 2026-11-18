@@ -46,6 +46,9 @@ jobs:
       - name: Hent kurshistorikk
         run: python -m scripts.hent_kurshistorikk --dager 800
 
+      - name: Hjerne (walk-forward, uten varsel)
+        run: python -m src.hjerne_kjor --ikke-varsle
+
       - name: Backtest
         run: |
           python -m src.innside_backtest | tee backtest.txt

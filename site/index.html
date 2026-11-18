@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Momentum-varsling</title>
-<link rel="icon" href="data:,">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="ikon-192.png">
+<link rel="apple-touch-icon" href="ikon-192.png">
+<meta name="theme-color" content="#0f6e56">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <style>
   :root { --bg:#f7f7f5; --kort:#fff; --tekst:#1c1c1a; --dempet:#6b6b66; --linje:#e4e4df; --aksent:#0f6e56; --pos:#0f6e56; --neg:#b3261e; --gul:#8a6100; }
   @media (prefers-color-scheme: dark) { :root { --bg:#161614; --kort:#1f1f1c; --tekst:#ecece8; --dempet:#9a9a93; --linje:#33332f; --aksent:#5dcaa5; --pos:#5dcaa5; --neg:#f09595; --gul:#e0b44c; } }
@@ -38,16 +42,35 @@
   .notat { font-size:13px; color:var(--dempet); background:var(--kort); border:1px solid var(--linje); border-left:3px solid var(--gul); border-radius:8px; padding:10px 14px; margin-bottom:16px; }
   a { color:var(--aksent); text-decoration:none; } a:hover { text-decoration:underline; }
   .tom { padding:24px; text-align:center; color:var(--dempet); }
+  .topp { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  button.knapp { font:inherit; font-size:13px; padding:6px 12px; border-radius:8px; border:1px solid var(--linje); background:var(--kort); color:var(--tekst); cursor:pointer; }
+  button.knapp:hover { border-color:var(--aksent); }
+  .forslag { background:var(--kort); border:1px solid var(--linje); border-left:3px solid var(--aksent); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+  .forslag.svak { border-left-color:var(--linje); }
+  .forslag h3 { margin:0 0 4px; font-size:15px; }
+  .rad { display:flex; flex-wrap:wrap; gap:6px 18px; font-size:13.5px; }
+  .rad b { font-weight:600; }
+  svg.graf { width:100%; height:180px; display:block; }
+  svg.graf text { font-size:11px; fill:var(--dempet); }
+  textarea { width:100%; min-height:110px; font:12px ui-monospace,monospace; background:var(--bg); color:var(--tekst); border:1px solid var(--linje); border-radius:8px; padding:8px; }
+  .varselboks { background:var(--kort); border:1px solid var(--linje); border-radius:10px; padding:12px 14px; margin-top:10px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Momentum-varsling</h1>
-  <div class="under" id="generert">Laster …</div>
+  <div class="topp">
+    <div>
+      <h1>Momentum-varsling</h1>
+      <div class="under" id="generert">Laster …</div>
+    </div>
+    <button class="knapp" id="varselknapp" hidden title="Slå på varsler på denne enheten">🔔 Varsler</button>
+  </div>
+  <div id="varselpanel" hidden></div>
 </header>
 <nav role="tablist" id="faner"></nav>
 <main>
   <section id="oversikt"></section>
+  <section id="hjerne" hidden></section>
   <section id="handler" hidden></section>
   <section id="backtest" hidden></section>
   <section id="nyheter" hidden></section>
@@ -56,7 +79,7 @@
 
 <script>
 "use strict";
-const FANER = [["oversikt","Oversikt"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
+const FANER = [["oversikt","Oversikt"],["hjerne","Hjerne"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
 const ROLLER = {ceo:"CEO",cfo:"CFO",styreleder:"Styreleder",styremedlem:"Styremedlem",ledelse:"Ledelse",naerstaaende:"Nærstående",ukjent:"Ukjent"};
 const RETNING = {kjop:"Kjøp",salg:"Salg",tildeling:"Tildeling",annet:"Annet"};
 let D = null;
@@ -71,7 +94,8 @@ function el(tag, attrs, ...barn) {
   return e;
 }
 const fmt = (n, d = 0) => n == null ? "–" : Number(n).toLocaleString("nb-NO", {maximumFractionDigits: d});
-const pst = (v) => v == null ? "–" : (v * 100).toLocaleString("nb-NO", {maximumFractionDigits: 1, signDisplay: "exceptZero"}) + " %";
+const pst = (v, d = 1) => v == null ? "–" : (v * 100).toLocaleString("nb-NO", {maximumFractionDigits: d, minimumFractionDigits: d, signDisplay: "exceptZero"}) + " %";
+const kr = (v) => v == null ? "–" : Number(v).toLocaleString("nb-NO", {maximumFractionDigits: 2, minimumFractionDigits: 2});
 const dato = (s) => s ? s.slice(0, 10) : "–";
 const klasse = (v) => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
 
@@ -87,25 +111,138 @@ function tabell(kolonner, rader, tom) {
 const kpi = (v, e) => el("div", {class: "kpi"}, el("div", {class: "v", text: v}), el("div", {class: "e", text: e}));
 const merke = (retning) => el("span", {class: "merke " + retning, text: RETNING[retning] || retning});
 
+function forslagKort(f) {
+  const ticker = (f.yahoo || "").split(".")[0];
+  const grunner = (f.bidrag || []).slice(0, 3).map(b => `${b[0]} ${pst(b[1])}`).join(" · ");
+  return el("div", {class: "forslag" + (f.anbefalt ? "" : " svak")},
+    el("h3", {text: `${f.anbefalt ? "Kjøpsforslag" : "Vurdert, ikke anbefalt"}: ${f.navn} (${ticker})`}),
+    el("div", {class: "rad"},
+      el("span", {}, "Inngang ", el("b", {text: `åpning ${f.inn_dato}`}), `, maks ${kr(f.limit_pris)}`),
+      el("span", {}, "Stopp ", el("b", {text: kr(f.stopp)})),
+      el("span", {}, "Utgang ", el("b", {text: `sluttkurs ${f.ut_dato}`})),
+      el("span", {}, "Forventet ", el("b", {text: pst(f.pred), class: klasse(f.pred)}), ` (sikkerhet ${Math.round(f.sikkerhet * 100)} %)`)),
+    el("div", {class: "under", text: f.beskrivelse}),
+    el("div", {class: "under", text: "Hvorfor: " + grunner}));
+}
+
 function oversikt() {
-  const t = D.tall, s = document.getElementById("oversikt");
+  const t = D.tall, s = document.getElementById("oversikt"), H = D.hjerne || {}, st = H.status;
   s.replaceChildren();
-  const venter = t.venter_pa_llm;
-  if (venter > 0) s.append(el("div", {class: "notat", text: `${fmt(venter)} innsidemeldinger venter på LLM-uttrekk (typisk norske meldinger). Signalene under dekker derfor bare det som er trukket ut så langt.`}));
+  const advarsler = [];
+  if (t.venter_pa_llm > 0) advarsler.push(`${fmt(t.venter_pa_llm)} innsidemeldinger venter på LLM-uttrekk.`);
+  if (D.umappede && D.umappede.length) advarsler.push(`${D.umappede.length} selskaper med innsidekjøp mangler ticker (se Drift).`);
+  const timer = D.siste_poll ? (Date.now() - new Date(D.siste_poll)) / 36e5 : null;
+  if (timer == null || timer > 30) advarsler.push(timer == null ? "Nyhetspollingen har ikke logget en vellykket kjøring." : `Siste nyhetspoll var for ${Math.round(timer)} timer siden.`);
+  for (const a of advarsler) s.append(el("div", {class: "notat", text: a}));
+
+  const tr = st ? st.trades : {};
   s.append(el("div", {class: "kpier"},
-    kpi(fmt(t.signaler), "innsidesignaler"), kpi(fmt(t.innsidekjop), "innsidekjøp (aksjer)"),
-    kpi(fmt(t.innsidehandler), "handler totalt"), kpi(fmt(t.nyheter), "nyheter lagret"),
-    kpi(fmt(t.selskaper_i_univers), "selskaper i universet")));
-  s.append(el("h2", {text: `Siste innsidesignaler (score ≥ ${D.signal.terskel}, vindu ${D.signal.vindu_dager} dager)`}));
+    kpi(st ? kr(st.egenkapital_slutt).replace(/,\d\d$/, "") + " kr" : "–", `papirporteføljen (start ${st ? fmt(st.param.kapital) : "–"} kr)`),
+    kpi(tr.lukket != null ? `${fmt(tr.lukket)} / ${fmt(tr.apne)}` : "–", "papirhandler lukket / åpne"),
+    kpi(tr.treff != null ? Math.round(tr.treff * 100) + " %" : "–", "treffrate (lukkede)"),
+    kpi(st && st.kalibrering.rangkorrelasjon != null ? st.kalibrering.rangkorrelasjon.toLocaleString("nb-NO") : "–", "rangkorrelasjon forventet/faktisk"),
+    kpi(fmt(t.innsidekjop), "innsidekjøp (aksjer)")));
+
+  const aktive = (H.forslag || []).filter(f => f.inn_dato >= new Date().toISOString().slice(0, 10));
+  s.append(el("h2", {text: "Forslag for neste handelsdag"}));
+  if (!aktive.length) s.append(el("div", {class: "tabellramme"}, el("div", {class: "tom", text: "Ingen nye hendelser venter på inngang."})));
+  for (const f of aktive.sort((a, b) => b.anbefalt - a.anbefalt || b.pred - a.pred)) s.append(forslagKort(f));
+
+  s.append(el("h2", {text: `Siste innsidesignaler (regelbasert score ≥ ${D.signal.terskel})`}));
   s.append(tabell([
     {navn: "Publisert", vis: r => dato(r.publisert)},
     {navn: "Selskap", vis: r => r.selskap},
     {navn: "Score", t: 1, vis: r => fmt(r.score, 1)},
     {navn: "Kjøpere", t: 1, vis: r => fmt(r.antall_personer)},
     {navn: "Verdi (NOK)", t: 1, vis: r => fmt(r.verdi_nok)},
-    {navn: "Begrunnelse", vis: r => r.begrunnelse, kl: () => "dempet"},
-  ], D.signaler.slice(0, 25), "Ingen signaler ennå."));
-  s.append(el("p", {class: "under", text: "Signalene er informasjon, ikke kjøpsråd. Vektene er startverdier som kalibreres i backtesten."}));
+  ], D.signaler.slice(0, 15), "Ingen signaler ennå."));
+  s.append(el("p", {class: "under", text: "Alt her er papirhandel og læring, ikke kjøpsråd."}));
+}
+
+function graf(punkter, startverdi) {
+  const NS = "http://www.w3.org/2000/svg", B = Math.max(320, Math.min(1060, window.innerWidth - 40)), Hh = 180, P = 28;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${B} ${Hh}`); svg.setAttribute("class", "graf"); svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Papirporteføljens verdi over tid");
+  if (punkter.length < 2) return el("div", {class: "tom", text: "For lite historikk til graf."});
+  const ys = punkter.map(p => p.verdi).concat([startverdi]);
+  const lo = Math.min(...ys), hi = Math.max(...ys), sp = (hi - lo) || 1;
+  const x = i => P + (B - 2 * P) * i / (punkter.length - 1), y = v => Hh - P - (Hh - 2 * P) * (v - lo) / sp;
+  const lag = (t, a) => { const e = document.createElementNS(NS, t); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); return e; };
+  svg.append(lag("line", {x1: P, x2: B - P, y1: y(startverdi), y2: y(startverdi), stroke: "currentColor", "stroke-opacity": .25, "stroke-dasharray": "4 4"}));
+  svg.append(lag("polyline", {points: punkter.map((p, i) => `${x(i)},${y(p.verdi)}`).join(" "), fill: "none", stroke: "var(--aksent)", "stroke-width": 2}));
+  const tekst = (tx, ty, t, anker) => { const e = lag("text", {x: tx, y: ty, "text-anchor": anker || "start"}); e.textContent = t; return e; };
+  svg.append(tekst(P, Hh - 8, punkter[0].dato), tekst(B - P, Hh - 8, punkter[punkter.length - 1].dato, "end"),
+             tekst(B - P, 14, fmt(hi) + " kr", "end"), tekst(B - P, Math.min(Hh - P - 4, y(lo) - 6), fmt(lo) + " kr", "end"));
+  return el("div", {class: "tabellramme"}, svg);
+}
+
+function hjerneFane() {
+  const s = document.getElementById("hjerne"), H = D.hjerne || {}, st = H.status;
+  s.replaceChildren();
+  if (!st) { s.append(el("div", {class: "tom", text: "Hjernen har ikke kjørt ennå."})); return; }
+  const p = st.param, tr = st.trades, k = st.kalibrering;
+  s.append(el("div", {class: "notat", text:
+    `Hjernen lærer av utfallet til alle hendelser (netto meravkastning over ${p.horisont} handelsdager, etter kostnad og minus børsindeksen). ` +
+    `Nyere utfall veier mest (halveringstid ${p.halveringstid} dager). Den foreslår kjøp bare når forventet verdi er over ${pst(p.min_edge)} ` +
+    `og sikkerheten over ${Math.round(p.min_sikkerhet * 100)} %. Posisjon ${fmt(p.posisjon)} kr, maks ${p.maks_apne} åpne.`}));
+  s.append(el("div", {class: "kpier"},
+    kpi(fmt(st.hendelser_vurdert), "hendelser vurdert"),
+    kpi(pst(tr.snitt_netto), "snitt netto per papirhandel"),
+    kpi(pst(st.referanse_alle_hendelser), "snitt hvis man tok alle"),
+    kpi(fmt(tr.pnl_kr) + " kr", "resultat lukkede"),
+    kpi(fmt(tr.stoppet), "stoppet ut")));
+  // Vis fra litt før første papirhandel (før det står porteføljen bare stille).
+  const ek = H.egenkapital || [], forste = (H.trades || []).map(t => t.inn_dato).sort()[0];
+  const fra = forste ? Math.max(0, ek.findIndex(e => e.dato >= forste) - 5) : Math.max(0, ek.length - 60);
+  s.append(el("h2", {text: "Papirporteføljen"}), graf(ek.slice(fra), p.kapital));
+
+  s.append(el("h2", {text: "Lærer den noe? Forventet mot faktisk utfall"}));
+  s.append(el("p", {class: "under", text: k.rangkorrelasjon == null
+    ? `For lite data ennå (${k.n} vurderinger med kjent utfall).`
+    : `Rangkorrelasjon ${k.rangkorrelasjon.toLocaleString("nb-NO")} over ${k.n} vurderinger. Over 0 betyr at høyere forventning faktisk ga bedre utfall; rundt 0 eller under betyr at den ikke har funnet noe ennå.`}));
+  s.append(tabell([
+    {navn: "Gruppe", vis: (r) => `${pst(r.fra)} til ${pst(r.til)}`},
+    {navn: "N", t: 1, vis: r => fmt(r.n)},
+    {navn: "Forventet", t: 1, vis: r => pst(r.forventet), kl: r => klasse(r.forventet)},
+    {navn: "Faktisk", t: 1, vis: r => pst(r.faktisk), kl: r => klasse(r.faktisk)},
+    {navn: "Treff", t: 1, vis: r => Math.round(r.treff * 100) + " %"},
+  ], k.grupper || [], "Ikke nok vurderinger med kjent utfall."));
+
+  s.append(el("h2", {text: "Papirhandler"}));
+  s.append(tabell([
+    {navn: "Inn", vis: r => r.inn_dato},
+    {navn: "Selskap", vis: r => r.navn},
+    {navn: "Inngang", t: 1, vis: r => kr(r.inn)},
+    {navn: "Stopp", t: 1, vis: r => kr(r.stopp)},
+    {navn: "Ut", vis: r => r.status === "åpen" ? `planlagt ${r.plan_ut_dato || "–"}` : r.ut_dato},
+    {navn: "Status", vis: r => r.status},
+    {navn: "Netto", t: 1, vis: r => r.status === "åpen" ? pst(r.raa) + " (åpen)" : pst(r.netto), kl: r => klasse(r.status === "åpen" ? r.raa : r.netto)},
+    {navn: "Forventet", t: 1, vis: r => pst(r.pred)},
+  ], H.trades || [], "Ingen papirhandler ennå — hjernen har ikke funnet noe den har tro på."));
+
+  const eff = [];
+  for (const [f, vs] of Object.entries((st.modell || {}).effekter || {})) for (const [v, e] of Object.entries(vs)) eff.push({f, v, ...e});
+  eff.sort((a, b) => Math.abs(b.effekt) - Math.abs(a.effekt));
+  s.append(el("h2", {text: "Det den har lært (effekt på forventet netto meravkastning)"}));
+  s.append(el("p", {class: "under", text: `Basis ${pst((st.modell || {}).basis)} · ${fmt((st.modell || {}).n)} observasjoner · vekt = hvor mye data effekten hviler på.`}));
+  s.append(tabell([
+    {navn: "Egenskap", vis: r => r.f},
+    {navn: "Verdi", vis: r => r.v},
+    {navn: "Effekt", t: 1, vis: r => pst(r.effekt, 2), kl: r => klasse(r.effekt)},
+    {navn: "Vekt", t: 1, vis: r => fmt(r.vekt, 1)},
+  ], eff.slice(0, 30), "Ingen effekter ennå."));
+
+  s.append(el("h2", {text: "Siste vurderinger"}));
+  s.append(tabell([
+    {navn: "Inn", vis: r => r.inn_dato},
+    {navn: "Selskap", vis: r => r.navn},
+    {navn: "Kilde", vis: r => r.kilde, kl: () => "dempet"},
+    {navn: "Forventet", t: 1, vis: r => pst(r.pred), kl: r => klasse(r.pred)},
+    {navn: "Sikkerhet", t: 1, vis: r => Math.round(r.sikkerhet * 100) + " %"},
+    {navn: "Valgt", vis: r => r.valgt ? "ja" : ""},
+    {navn: "Faktisk", t: 1, vis: r => pst(r.utfall), kl: r => klasse(r.utfall)},
+  ], H.vurderinger || [], "Ingen vurderinger ennå."));
 }
 
 function handlerFane() {
@@ -142,17 +279,19 @@ function handlerFane() {
 function backtestFane() {
   const s = document.getElementById("backtest"), b = D.backtest;
   s.replaceChildren();
-  s.append(el("div", {class: "notat", text: `Inngang er åpningskursen dagen etter publisering. Kostnad ${(b.kostnad_roundtrip * 100).toFixed(1)} % per runde er trukket fra. Ikke markedsjustert: en positiv snittavkastning kan være markedet og ikke innsiden. ${fmt(b.kjop_totalt)} kjøp totalt, ${fmt(b.uten_kursdata)} uten kursdata.`}));
+  s.append(el("div", {class: "notat", text: `Inngang er åpningskursen dagen etter publisering. Netto = etter kurtasje og slippage (avhenger av likviditet). Meravkastning = netto minus børsindeksen samme dager — det er den som sier om innsiden tilførte noe. ${fmt(b.kjop_totalt)} kjøp totalt, ${fmt(b.uten_kursdata)} uten kursdata.`}));
   const rader = [];
   for (const [g, hs] of Object.entries(b.grupper)) for (const [h, st] of Object.entries(hs)) if (st.n) rader.push({g, h, ...st});
   s.append(tabell([
     {navn: "Gruppe", vis: r => r.g},
     {navn: "Horisont", t: 1, vis: r => r.h.replace("d", " dager")},
     {navn: "N", t: 1, vis: r => fmt(r.n)},
-    {navn: "Treffrate", t: 1, vis: r => r.treff != null ? Math.round(r.treff * 100) + " %" : "–"},
-    {navn: "Snitt netto", t: 1, vis: r => pst(r.snitt), kl: r => klasse(r.snitt) + " t"},
-    {navn: "Median netto", t: 1, vis: r => pst(r.median), kl: r => klasse(r.median) + " t"},
-  ], rader, "Ingen backtest-data ennå. Kjør workflowen «Innside backfill og backtest» først."));
+    {navn: "Treff (mer)", t: 1, vis: r => r.treff != null ? Math.round(r.treff * 100) + " %" : "–"},
+    {navn: "Netto", t: 1, vis: r => pst(r.snitt), kl: r => klasse(r.snitt)},
+    {navn: "Meravk. snitt", t: 1, vis: r => pst(r.mer_snitt), kl: r => klasse(r.mer_snitt)},
+    {navn: "Meravk. median", t: 1, vis: r => pst(r.mer_median), kl: r => klasse(r.mer_median)},
+    {navn: "Kostnad", t: 1, vis: r => pst(r.kost_snitt), kl: () => "dempet"},
+  ], rader, "Ingen backtest-data ennå."));
 }
 
 function nyheterFane() {
@@ -170,13 +309,55 @@ function nyheterFane() {
 function driftFane() {
   const s = document.getElementById("drift");
   s.replaceChildren(
-    el("div", {class: "kpier"}, kpi(dato(D.tall.siste_nyhet), "siste nyhet"), kpi(dato(D.tall.siste_kurs), "siste kursdato")),
+    el("div", {class: "kpier"}, kpi(dato(D.tall.siste_nyhet), "siste nyhet"), kpi(dato(D.tall.siste_kurs), "siste kursdato"),
+       kpi(D.siste_poll ? D.siste_poll.replace("T", " ").slice(0, 16) : "–", "siste vellykkede poll")),
+    el("h2", {text: "Selskaper med innsidekjøp uten ticker"}),
+    el("p", {class: "under", text: "Legg dem inn i universe/tickers.csv (slug,navn,ticker,yahoo,marked,aktiv) for å få dem med i backtest og hjerne."}),
+    tabell([
+      {navn: "Slug", vis: r => r.slug},
+      {navn: "Navn", vis: r => r.navn || ""},
+      {navn: "Kjøp", t: 1, vis: r => fmt(r.kjop)},
+      {navn: "Siste", vis: r => dato(r.siste)},
+    ], D.umappede || [], "Alle er mappet."),
+    el("h2", {text: "Kjørelogg"}),
     tabell([
       {navn: "Tidspunkt", vis: r => r.tidspunkt.replace("T", " ").slice(0, 16)},
       {navn: "Jobb", vis: r => r.jobb},
       {navn: "Status", vis: r => r.status, kl: r => r.status === "ok" ? "pos" : "neg"},
       {navn: "Detalj", vis: r => r.detalj || "", kl: () => "dempet"},
     ], D.logg, "Ingen kjøringer logget."));
+}
+
+// --- Web push: abonnementet vises her og legges inn som GitHub-secret.
+function b64tilBytes(b64) {
+  const p = "=".repeat((4 - b64.length % 4) % 4), r = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(r, c => c.charCodeAt(0));
+}
+
+async function slaaPaaVarsler() {
+  const panel = document.getElementById("varselpanel");
+  panel.hidden = false;
+  const vis = (...barn) => panel.replaceChildren(el("div", {class: "varselboks"}, ...barn));
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      vis(el("p", {text: "Denne nettleseren støtter ikke web push. På iPhone: Del → «Legg til på Hjem-skjerm», åpne appen derfra og prøv igjen."}));
+      return;
+    }
+    if (!D.webpush_public) { vis(el("p", {text: "Web push er ikke satt opp: repo-variabelen WEBPUSH_VAPID_PUBLIC mangler (se README)."})); return; }
+    const tillatelse = await Notification.requestPermission();
+    if (tillatelse !== "granted") { vis(el("p", {text: "Varsler ble ikke tillatt. Slå det på i nettleserens innstillinger for siden."})); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const ab = (await reg.pushManager.getSubscription()) ||
+      await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64tilBytes(D.webpush_public)});
+    const json = JSON.stringify(ab.toJSON());
+    const felt = el("textarea", {readonly: "readonly"}); felt.value = json;
+    const kopier = el("button", {class: "knapp", text: "Kopier"});
+    kopier.addEventListener("click", async () => { try { await navigator.clipboard.writeText(json); kopier.textContent = "Kopiert ✓"; } catch { felt.select(); } });
+    vis(el("p", {text: "Varsler er tillatt på denne enheten. Siste steg: legg teksten under inn som GitHub-secret WEBPUSH_SUBSCRIPTIONS (flere enheter: lim dem inn som en liste [ {...}, {...} ]). Kjør så «Varslingstest»."}),
+        felt, el("div", {}, kopier));
+  } catch (e) {
+    vis(el("p", {text: "Klarte ikke å slå på varsler: " + e.message}));
+  }
 }
 
 function visFane(id) {
@@ -201,7 +382,13 @@ async function start() {
     return;
   }
   document.getElementById("generert").textContent = "Oppdatert " + D.generert.replace("T", " ").slice(0, 16);
-  oversikt(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
+  oversikt(); hjerneFane(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+    const knapp = document.getElementById("varselknapp");
+    knapp.hidden = false;
+    knapp.addEventListener("click", slaaPaaVarsler);
+  }
   const fra = location.hash.slice(1);
   visFane(FANER.some(f => f[0] === fra) ? fra : "oversikt");
 }

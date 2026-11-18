@@ -1,0 +1,26 @@
+name: Varslingstest
+
+# Kjør manuelt etter at du har lagt inn Telegram- eller web push-secrets.
+# Skriver ut nøyaktig hva som mangler eller er feil, og sender en testmelding.
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Test varsling
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WEBPUSH_VAPID_PRIVATE: ${{ secrets.WEBPUSH_VAPID_PRIVATE }}
+          WEBPUSH_SUBSCRIPTIONS: ${{ secrets.WEBPUSH_SUBSCRIPTIONS }}
+          WEBPUSH_KONTAKT: ${{ vars.WEBPUSH_KONTAKT }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+        run: python -m src.notify --test

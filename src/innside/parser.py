@@ -28,6 +28,7 @@ class Handel:
     pris: float | None
     valuta: str | None
     transaksjonsdato: str | None
+    beholdning_etter: float | None = None
 
     @property
     def verdi(self) -> float | None:
