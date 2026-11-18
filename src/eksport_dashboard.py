@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src import db, innside_backtest
-from src.config import ROOT, TZ, env
+from src.config import INDEKSER, ROOT, TZ, env
 from src.innside.kjor import EKSTRAKSJON_VERSJON
 from src.innside.signal import SIGNAL_VERSJON, TERSKEL, VINDU_DAGER
 
@@ -96,6 +96,19 @@ def bygg(con) -> dict:
         "AND h.selskap_slug NOT IN (SELECT slug FROM selskaper WHERE yahoo IS NOT NULL AND yahoo <> '') "
         "GROUP BY h.selskap_slug ORDER BY kjop DESC LIMIT 50",
     )
+    # Kurser for kandidater, papirhandler og indekser (siste 120 handelsdager),
+    # slik at simuleringsfanen kan følge egne papirkjøp mot ekte kurser.
+    symboler = {c["yahoo"] for c in (hjerne["status"] or {}).get("kandidater", [])} | {t["yahoo"] for t in hjerne["trades"]}
+    symboler |= set(INDEKSER.values())
+    kurser = {}
+    for sym in sorted(x for x in symboler if x):
+        rader = con.execute(
+            "SELECT dato, open, high, low, close FROM (SELECT * FROM kurser WHERE yahoo = ? ORDER BY dato DESC LIMIT 120) ORDER BY dato",
+            (sym,),
+        ).fetchall()
+        if rader:
+            r4 = lambda v: round(v, 4) if v is not None else None
+            kurser[sym] = {k: [r4(r[k]) if k != "dato" else r[k] for r in rader] for k in ("dato", "open", "high", "low", "close")}
     siste_poll = con.execute(
         "SELECT MAX(tidspunkt) FROM kjorelogg WHERE jobb = 'poll_news' AND status = 'ok'"
     ).fetchone()[0]
@@ -112,6 +125,7 @@ def bygg(con) -> dict:
         "umappede": umappede,
         "siste_poll": siste_poll,
         "webpush_public": env("WEBPUSH_VAPID_PUBLIC", ""),
+        "kurser": kurser,
     }
 
 

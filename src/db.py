@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS hjerne_prediksjoner (
 CREATE TABLE IF NOT EXISTS hjerne_trades (
     id INTEGER PRIMARY KEY, nokkel TEXT, slug TEXT, navn TEXT, yahoo TEXT,
     inn_dato TEXT, inn REAL, stopp REAL, plan_ut_dato TEXT, ut_dato TEXT, ut REAL,
-    status TEXT, raa REAL, marked REAL, kost REAL, netto REAL, pnl_kr REAL, pred REAL
+    status TEXT, raa REAL, marked REAL, kost REAL, netto REAL, pnl_kr REAL, pred REAL, belop REAL
 );
 CREATE TABLE IF NOT EXISTS hjerne_egenkapital (dato TEXT PRIMARY KEY, verdi REAL);
 CREATE TABLE IF NOT EXISTS hjerne_forslag (
@@ -215,7 +215,7 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 
 # Kolonner lagt til etter at tabellen fantes. CREATE TABLE IF NOT EXISTS
 # endrer ikke eksisterende tabeller, så de legges til her.
-MIGRERINGER = [("innsidehandler", "beholdning_etter", "REAL")]
+MIGRERINGER = [("innsidehandler", "beholdning_etter", "REAL"), ("hjerne_trades", "belop", "REAL")]
 
 
 def _migrer(con: sqlite3.Connection) -> None:

@@ -43,7 +43,7 @@ def lagre(con, res: simuler.Resultat, p: simuler.Param, ekstra: dict | None = No
     )
     con.execute("DELETE FROM hjerne_trades")
     kol = ["nokkel", "slug", "navn", "yahoo", "inn_dato", "inn", "stopp", "plan_ut_dato", "ut_dato", "ut",
-           "status", "raa", "marked", "kost", "netto", "pnl_kr", "pred"]
+           "status", "raa", "marked", "kost", "netto", "pnl_kr", "pred", "belop"]
     con.executemany(
         f"INSERT INTO hjerne_trades ({','.join(kol)}) VALUES ({','.join('?' * len(kol))})",
         [tuple(asdict(t)[k] for k in kol) for t in res.trades],
@@ -67,7 +67,8 @@ def lagre(con, res: simuler.Resultat, p: simuler.Param, ekstra: dict | None = No
     alle_utfall = [r["utfall"] for r in res.prediksjoner if r["utfall"] is not None]
     status = {
         "param": {k: getattr(p, k) for k in ("horisont", "halveringstid", "prior", "min_edge", "min_sikkerhet",
-                                              "maks_apne", "kapital", "stopp_atr")} | {"posisjon": round(p.posisjon)},
+                                              "maks_apne", "kapital", "stopp_atr", "maks_andel", "risiko",
+                                              "likviditet_tak", "min_posisjon")} | {"posisjon": round(p.posisjon)},
         "modell": res.modell.som_dict() if res.modell else None,
         "kalibrering": simuler.kalibrering(res.prediksjoner),
         "hendelser_vurdert": len(res.prediksjoner),

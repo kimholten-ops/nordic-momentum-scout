@@ -100,10 +100,12 @@ def ranger(
 
         limit = sist * (1 + LIMIT_PAASLAG)
         oms = marked.til_nok(marked.omsetning_nok(s, len(s.datoer)), h.yahoo)
-        kost = marked.kostnad(oms, p_kort.posisjon)
+        sa = stopp_andel(s, len(s.datoer), p_kort.stopp_atr)
+        belop = p_kort.storrelse(sa, oms)
+        kost = marked.kostnad(oms, max(belop, 1.0))
         eg = _egenskaper(h)
-        k = _horisont(kort, eg, p_kort.horisont, limit, kost, inn_dato, p_kort.posisjon, p_kort.min_sikkerhet, p_kort.min_edge)
-        lg = _horisont(lang, eg, p_lang.horisont, limit, kost, inn_dato, p_kort.posisjon, p_kort.min_sikkerhet, p_kort.min_edge)
+        k = _horisont(kort, eg, p_kort.horisont, limit, kost, inn_dato, belop, p_kort.min_sikkerhet, p_kort.min_edge)
+        lg = _horisont(lang, eg, p_lang.horisont, limit, kost, inn_dato, belop, p_kort.min_sikkerhet, p_kort.min_edge)
         score = round(100 * (VEKT_KORT * _persentil(hist_k, k["forventet"]) + VEKT_LANG * _persentil(hist_l, lg["forventet"])))
 
         # Merket følger den ABSOLUTTE forventningen; scoren er bare relativ.
@@ -124,8 +126,9 @@ def ranger(
             "status": status, "dag_nr": dag_nr, "inngang_faktisk": inngang_faktisk, "hittil": hittil,
             "siste_kurs": sist, "siste_kursdag": siste_kursdag,
             "inn_dato": inn_dato.isoformat(), "limit": limit,
-            "stopp": limit * (1 - stopp_andel(s, len(s.datoer), p_kort.stopp_atr)),
-            "kostnad": kost, "omsetning_nok": oms, "posisjon": p_kort.posisjon,
+            "stopp": limit * (1 - sa),
+            "kostnad": kost, "omsetning_nok": oms, "posisjon": belop,
+            "antall": int(belop // limit) if limit else 0, "for_liten": belop < p_kort.min_posisjon,
             "kort": k, "lang": lg, "score": score, "anbefaling": anbefaling,
             "kjop_horisont": "begge" if k["kjop"] and lg["kjop"] else ("kort" if k["kjop"] else ("lang" if lg["kjop"] else None)),
             "break_even": limit * (1 + kost),

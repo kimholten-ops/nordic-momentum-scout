@@ -99,7 +99,7 @@ KURSHISTORIKK_DAGER = int(env("KURSHISTORIKK_DAGER", "800"))
 # Kurtasje i kroner per handel og posisjonsstørrelse avgjør kurtasje i prosent;
 # slippage avhenger av likviditet (median daglig omsetning siste 20 dager, NOK).
 KURTASJE_KR = float(env("KURTASJE_KR", "29"))
-POSISJON_KR = float(env("POSISJON_KR", "3300"))
+POSISJON_KR = float(env("POSISJON_KR", "12500"))  # typisk posisjon; brukes i backtest og læringsmålet
 # Slippage PER SIDE ≈ halve spreaden: likvide 0,1 %, mellomstore 0,4 %, små 1 %.
 SLIPPAGE_ETTER_OMSETNING = [(50_000_000, 0.001), (5_000_000, 0.004), (0, 0.01)]
 
@@ -110,8 +110,18 @@ HJERNE_HALVERINGSTID = float(env("HJERNE_HALVERINGSTID", "30"))  # dager: nyere 
 HJERNE_PRIOR_STYRKE = float(env("HJERNE_PRIOR_STYRKE", "15"))  # krymping mot 0 (antall "late" observasjoner)
 HJERNE_MIN_EDGE = float(env("HJERNE_MIN_EDGE", "0.005"))    # forventet netto meravkastning for å handle
 HJERNE_MIN_SIKKERHET = float(env("HJERNE_MIN_SIKKERHET", "0.6"))  # P(netto meravkastning > 0)
-HJERNE_MAKS_APNE = int(env("HJERNE_MAKS_APNE", "3"))
-HJERNE_KAPITAL = float(env("HJERNE_KAPITAL", "10000"))
+HJERNE_MAKS_APNE = int(env("HJERNE_MAKS_APNE", "6"))
+HJERNE_KAPITAL = float(env("HJERNE_KAPITAL", "100000"))   # papirkapital
+# Posisjonsstørrelse = det MINSTE av:
+#   - HJERNE_MAKS_ANDEL av kapitalen (spredning: ingen enkeltaksje over 15 %),
+#   - HJERNE_RISIKO av kapitalen delt på stoppavstanden (taper du ut på
+#     stoppen, mister du ca. 1 % av kapitalen),
+#   - HJERNE_LIKVIDITET_TAK av median daglig omsetning (du skal ikke flytte kursen).
+# Under HJERNE_MIN_POSISJON spiser kurtasjen for mye, og handelen droppes.
+HJERNE_MAKS_ANDEL = float(env("HJERNE_MAKS_ANDEL", "0.15"))
+HJERNE_RISIKO = float(env("HJERNE_RISIKO", "0.01"))
+HJERNE_LIKVIDITET_TAK = float(env("HJERNE_LIKVIDITET_TAK", "0.05"))
+HJERNE_MIN_POSISJON = float(env("HJERNE_MIN_POSISJON", "3000"))
 HJERNE_STOPP_ATR = float(env("HJERNE_STOPP_ATR", "2.0"))    # stopp = inngang - k x ATR20
 HJERNE_VARSLE = env("HJERNE_VARSLE", "1") == "1"
 
