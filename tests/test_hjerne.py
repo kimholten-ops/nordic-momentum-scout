@@ -114,3 +114,32 @@ def test_stopp_utloses_og_forslag_har_inn_stopp_utgang():
                                                                halveringstid=1e9))
     f = next(f for f in res.forslag if f["nokkel"] == "ny")
     assert f["anbefalt"] == 1 and f["stopp"] < f["limit"] and f["ut_dato"] > f["inn_dato"] > siste
+
+
+def test_kandidater_rangeres_med_inngang_stopp_og_to_horisonter():
+    from src.hjerne import kandidater as kand
+
+    hendelser, kurser = _verden(antall=80)
+    siste = kurser["OSEBX.OL"].datoer[-1]
+    nye = [
+        Hendelse("ja1", "innside", "a0", "A0", hendelser[0].yahoo, siste + "T18:00:00", {"innside.signal": "ja"}),
+        Hendelse("nei1", "innside", "a1", "A1", hendelser[1].yahoo, siste + "T18:00:00", {"innside.signal": "nei"}),
+        Hendelse("ja0", "innside", "a0", "A0", hendelser[0].yahoo, siste + "T09:00:00", {"innside.signal": "ja"}),
+    ]
+    pk = simuler.Param(horisont=5, prior=5, min_edge=0.01, maks_apne=50, halveringstid=1e9)
+    pl = simuler.Param(horisont=10, prior=5, min_edge=0.01, maks_apne=50, halveringstid=1e9)
+    alle = hendelser + nye
+    mk = simuler.kjor(alle, kurser, pk).modell
+    ml = simuler.kjor(alle, kurser, pl).modell
+    ut = kand.ranger(alle, kurser, mk, ml, pk, pl)
+    assert [c["slug"] for c in ut].count("a0") == 1  # én rad per selskap
+    a0 = next(c for c in ut if c["slug"] == "a0")
+    assert a0["hendelser_i_perioden"] == 2 and a0["nokkel"] == "ja1"
+    assert ut[0]["slug"] == "a0" and ut[0]["anbefaling"] == "kjøp" and ut[0]["rang"] == 1
+    nei = next(c for c in ut if c["slug"] == "a1")
+    assert nei["anbefaling"] == "unngå" and nei["score"] < a0["score"]
+    for c in (a0, nei):
+        assert c["stopp"] < c["limit"] < c["break_even"]
+        assert 0 <= c["kort"]["p_gevinst"] <= 1 and c["lang"]["dager"] == 10
+        assert c["lang"]["ut_dato"] > c["kort"]["ut_dato"] > c["inn_dato"]
+    assert a0["kort"]["maal"] > a0["break_even"]  # positiv forventning => forventet kurs over break-even

@@ -16,7 +16,8 @@ from dataclasses import asdict
 from datetime import datetime
 
 from src import db, marked
-from src.config import HJERNE_VARSLE, TZ
+from src.config import HJERNE_HORISONT_LANG, HJERNE_VARSLE, TZ
+from src.hjerne import kandidater as kand
 from src.hjerne import hendelser as hh
 from src.hjerne import simuler
 from src.notify import esc, send
@@ -30,7 +31,7 @@ def _kr(v: float) -> str:
     return f"{v:,.2f}".replace(",", " ").replace(".", ",")
 
 
-def lagre(con, res: simuler.Resultat, p: simuler.Param) -> dict:
+def lagre(con, res: simuler.Resultat, p: simuler.Param, ekstra: dict | None = None) -> dict:
     na = datetime.now(TZ).isoformat(timespec="seconds")
     con.execute("DELETE FROM hjerne_prediksjoner")
     con.executemany(
@@ -82,7 +83,7 @@ def lagre(con, res: simuler.Resultat, p: simuler.Param) -> dict:
         },
         "referanse_alle_hendelser": round(statistics.mean(alle_utfall), 4) if alle_utfall else None,
         "egenkapital_slutt": res.egenkapital[-1][1] if res.egenkapital else p.kapital,
-    }
+    } | (ekstra or {})
     con.execute(
         "INSERT INTO hjerne_status (id, oppdatert, data) VALUES (1, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET oppdatert=excluded.oppdatert, data=excluded.data",
@@ -124,7 +125,23 @@ def kjor(varsle_nye: bool = HJERNE_VARSLE) -> dict:
         hendelser = hh.alle(con, kurser)
         p = simuler.Param()
         res = simuler.kjor(hendelser, kurser, p)
-        status = lagre(con, res, p)
+        # Lang horisont: egen walk-forward (for å måle om den lærer) og egen modell.
+        p_lang = simuler.Param(horisont=HJERNE_HORISONT_LANG)
+        res_lang = simuler.kjor(hendelser, kurser, p_lang)
+        regel = {
+            (r["selskap_slug"], r["publisert"][:10]): r["score"]
+            for r in con.execute("SELECT selskap_slug, publisert, MAX(score) AS score FROM innside_signaler "
+                                 "GROUP BY selskap_slug, substr(publisert, 1, 10)")
+        }
+        kandidater = kand.ranger(hendelser, kurser, res.modell, res_lang.modell, p, p_lang, regel) if res.modell and res_lang.modell else []
+        ekstra = {
+            "kandidater": kandidater,
+            "kvalitet": {
+                "kort": {"dager": p.horisont, **simuler.kalibrering(res.prediksjoner)},
+                "lang": {"dager": p_lang.horisont, **simuler.kalibrering(res_lang.prediksjoner)},
+            },
+        }
+        status = lagre(con, res, p, ekstra)
         varslet = varsle(con) if varsle_nye else 0
         t = status["trades"]
         db.logg(

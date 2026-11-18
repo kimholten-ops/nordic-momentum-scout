@@ -104,7 +104,8 @@ POSISJON_KR = float(env("POSISJON_KR", "3300"))
 SLIPPAGE_ETTER_OMSETNING = [(50_000_000, 0.001), (5_000_000, 0.004), (0, 0.01)]
 
 # --- Hjerne (src/hjerne/) -------------------------------------------------------
-HJERNE_HORISONT = int(env("HJERNE_HORISONT", "5"))          # handelsdager i en trade
+HJERNE_HORISONT = int(env("HJERNE_HORISONT", "5"))          # handelsdager i en trade (kort sikt)
+HJERNE_HORISONT_LANG = int(env("HJERNE_HORISONT_LANG", "20"))  # lang sikt på kandidatsiden
 HJERNE_HALVERINGSTID = float(env("HJERNE_HALVERINGSTID", "30"))  # dager: nyere utfall veier mer
 HJERNE_PRIOR_STYRKE = float(env("HJERNE_PRIOR_STYRKE", "15"))  # krymping mot 0 (antall "late" observasjoner)
 HJERNE_MIN_EDGE = float(env("HJERNE_MIN_EDGE", "0.005"))    # forventet netto meravkastning for å handle
