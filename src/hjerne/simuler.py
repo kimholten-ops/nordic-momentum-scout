@@ -21,6 +21,10 @@ from src.config import (
     HJERNE_HALVERINGSTID,
     HJERNE_HORISONT,
     HJERNE_KAPITAL,
+    HJERNE_LIKVIDITET_TAK,
+    HJERNE_MAKS_ANDEL,
+    HJERNE_MIN_POSISJON,
+    HJERNE_RISIKO,
     HJERNE_MAKS_APNE,
     HJERNE_MIN_EDGE,
     HJERNE_MIN_SIKKERHET,
@@ -45,9 +49,23 @@ class Param:
     kapital: float = HJERNE_KAPITAL
     stopp_atr: float = HJERNE_STOPP_ATR
 
+    maks_andel: float = HJERNE_MAKS_ANDEL
+    risiko: float = HJERNE_RISIKO
+    likviditet_tak: float = HJERNE_LIKVIDITET_TAK
+    min_posisjon: float = HJERNE_MIN_POSISJON
+
+    def storrelse(self, stopp_andel: float, omsetning_nok: float | None, kapital: float | None = None) -> float:
+        """Beløp i kroner for én posisjon (se config for reglene)."""
+        k = self.kapital if kapital is None else kapital
+        grenser = [k * self.maks_andel, k * self.risiko / max(stopp_andel, 0.01)]
+        if omsetning_nok:
+            grenser.append(omsetning_nok * self.likviditet_tak)
+        return round(min(grenser), -2)
+
     @property
     def posisjon(self) -> float:
-        return self.kapital / self.maks_apne
+        """Typisk posisjon (8 % stopp, god likviditet) — til visning."""
+        return self.storrelse(0.08, None)
 
 
 @dataclass
@@ -69,6 +87,7 @@ class Trade:
     kost: float = 0.0
     netto: float | None = None
     pnl_kr: float | None = None
+    belop: float = 0.0
 
 
 @dataclass
@@ -187,8 +206,15 @@ def kjor(hendelser: list[Hendelse], kurser: dict[str, marked.Serie], p: Param | 
                 inn = s.open[i]
                 if not inn:
                     continue
-                plan = s.datoer[i + p.horisont] if i + p.horisont < len(s.datoer) else None
-                t = Trade(h.nokkel, h.slug, h.navn, h.yahoo, dag, inn, inn * (1 - stopp_andel(s, i, p.stopp_atr)), plan, pred)
+                sa = stopp_andel(s, i, p.stopp_atr)
+                belop = p.storrelse(sa, marked.til_nok(marked.omsetning_nok(s, i), h.yahoo), kapital)
+                belop = min(belop, kapital - sum(x.belop for x in apne))  # bare ledig kontant
+                if belop < p.min_posisjon:
+                    continue
+                # Salgsdag: kjent kursdag, ellers anslått frem i tid (ukedager).
+                plan = (s.datoer[i + p.horisont] if i + p.horisont < len(s.datoer) else
+                        _legg_til_handelsdager(date.fromisoformat(s.datoer[-1]), i + p.horisont - len(s.datoer) + 1).isoformat())
+                t = Trade(h.nokkel, h.slug, h.navn, h.yahoo, dag, inn, inn * (1 - sa), plan, pred, belop=belop)
                 apne.append(t)
                 res.trades.append(t)
                 rad["valgt"] = 1
@@ -230,13 +256,16 @@ def kjor(hendelser: list[Hendelse], kurser: dict[str, marked.Serie], p: Param | 
         sist = s.close[-1]
         if not sist:
             continue
-        aksepter = pred >= p.min_edge and sikk >= p.min_sikkerhet and ledig > 0 and not any(t.slug == h.slug for t in apne)
+        aksepter = (pred >= p.min_edge and sikk >= p.min_sikkerhet and ledig > 0
+                    and not any(t.slug == h.slug for t in apne))
         limit = sist * (1 + LIMIT_PAASLAG)
+        sa = stopp_andel(s, len(s.datoer), p.stopp_atr)
+        belop = p.storrelse(sa, marked.til_nok(marked.omsetning_nok(s, len(s.datoer)), h.yahoo), kapital)
         inn_dag = _legg_til_handelsdager(date.fromisoformat(max(h.publisert[:10], siste_kursdag)), 1)
         res.forslag.append({
             "nokkel": h.nokkel, "kilde": h.kilde, "slug": h.slug, "navn": h.navn, "yahoo": h.yahoo,
             "publisert": h.publisert, "pred": pred, "sikkerhet": sikk, "bidrag": bidrag[:4],
-            "siste_kurs": sist, "limit": limit, "stopp": limit * (1 - stopp_andel(s, len(s.datoer), p.stopp_atr)),
+            "siste_kurs": sist, "limit": limit, "stopp": limit * (1 - sa), "belop": belop,
             "inn_dato": inn_dag.isoformat(), "ut_dato": _legg_til_handelsdager(inn_dag, p.horisont).isoformat(),
             "beskrivelse": h.beskrivelse, "anbefalt": int(aksepter),
         })
@@ -253,16 +282,16 @@ def _lukk(t: Trade, dag: str, pris: float | None, status: str, kurser, p: Param)
     t.ut_dato, t.ut, t.status = dag, pris, status
     t.raa = pris / t.inn - 1
     t.marked = _indeksavkastning(kurser, t.yahoo, t.inn_dato, dag)
-    t.kost = marked.kostnad(marked.til_nok(marked.omsetning_nok(s, i), t.yahoo), p.posisjon)
+    t.kost = marked.kostnad(marked.til_nok(marked.omsetning_nok(s, i), t.yahoo), t.belop)
     t.netto = t.raa - t.kost
-    t.pnl_kr = round(p.posisjon * t.netto, 2)
+    t.pnl_kr = round(t.belop * t.netto, 2)
 
 
 def _urealisert(t: Trade, kurser, dag: str, p: Param) -> float:
     s = kurser[t.yahoo]
     j = s.indeks_til_og_med(dag)
     c = s.close[j] if j >= 0 else None
-    return p.posisjon * (c / t.inn - 1) if c else 0.0
+    return t.belop * (c / t.inn - 1) if c else 0.0
 
 
 MIN_TRENT = 30

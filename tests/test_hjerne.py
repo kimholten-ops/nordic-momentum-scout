@@ -143,3 +143,22 @@ def test_kandidater_rangeres_med_inngang_stopp_og_to_horisonter():
         assert 0 <= c["kort"]["p_gevinst"] <= 1 and c["lang"]["dager"] == 10
         assert c["lang"]["ut_dato"] > c["kort"]["ut_dato"] > c["inn_dato"]
     assert a0["kort"]["maal"] > a0["break_even"]  # positiv forventning => forventet kurs over break-even
+
+
+def test_posisjonsstorrelse_risiko_spredning_og_likviditet():
+    p = simuler.Param(kapital=100_000, maks_andel=0.15, risiko=0.01, likviditet_tak=0.05)
+    assert p.storrelse(0.04, None) == 15_000          # spredning binder: 15 % av kapitalen
+    assert p.storrelse(0.10, None) == 10_000          # risiko binder: 1 % / 10 % stopp
+    assert p.storrelse(0.04, 100_000) == 5_000        # likviditet binder: 5 % av dagsomsetning
+    assert p.storrelse(0.10, None, kapital=50_000) == 5_000  # følger kapitalen
+
+
+def test_papirhandler_bruker_ledig_kontant():
+    hendelser, kurser = _verden(antall=80)
+    p = simuler.Param(horisont=5, prior=5, min_edge=0.01, maks_apne=50, halveringstid=1e9, kapital=20_000,
+                      maks_andel=0.5, risiko=1.0, min_posisjon=3000)
+    res = simuler.kjor(hendelser, kurser, p)
+    assert res.trades
+    for dag, verdi in res.egenkapital:
+        apne = [t for t in res.trades if t.inn_dato <= dag and (t.status == "åpen" or t.ut_dato > dag)]
+        assert sum(t.belop for t in apne) <= verdi * 1.07  # aldri mer investert enn porteføljen er verdt

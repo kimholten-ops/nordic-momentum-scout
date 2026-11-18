@@ -91,6 +91,17 @@
   details.forklaring { background:var(--kort); border:1px solid var(--linje); border-radius:10px; padding:10px 14px; margin-bottom:14px; font-size:13.5px; }
   details.forklaring summary { cursor:pointer; font-weight:600; }
   details.forklaring li { margin:4px 0; }
+  .sim-skjema { display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap:8px; align-items:end; background:var(--kort); border:1px solid var(--linje); border-radius:10px; padding:12px 14px; }
+  .sim-skjema label { display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--dempet); }
+  .sim-skjema input, .sim-skjema select { width:100%; }
+  @media (max-width: 860px) { .sim-skjema { grid-template-columns: 1fr 1fr; } .sim-skjema .bred { grid-column: 1 / -1; } }
+  .pos-kort { background:var(--kort); border:1px solid var(--linje); border-radius:10px; padding:12px 14px; margin-bottom:10px; display:grid; grid-template-columns: 1.4fr 1fr 1fr 1.2fr auto; gap:12px; align-items:center; }
+  @media (max-width: 860px) { .pos-kort { grid-template-columns: 1fr 1fr; } }
+  .pos-kort .stor { font-size:20px; font-weight:650; font-variant-numeric:tabular-nums; }
+  .pos-kort .smaa { font-size:12.5px; color:var(--dempet); font-variant-numeric:tabular-nums; }
+  .skala { position:relative; height:8px; background:var(--linje); border-radius:99px; margin:8px 0 4px; }
+  .skala i { position:absolute; top:-3px; width:3px; height:14px; border-radius:2px; }
+  .knapp.liten { font-size:12px; padding:3px 9px; }
   .varselboks { background:var(--kort); border:1px solid var(--linje); border-radius:10px; padding:12px 14px; margin-top:10px; }
 </style>
 </head>
@@ -108,6 +119,7 @@
 <nav role="tablist" id="faner"></nav>
 <main>
   <section id="kandidater" hidden></section>
+  <section id="simulering" hidden></section>
   <section id="oversikt" hidden></section>
   <section id="hjerne" hidden></section>
   <section id="handler" hidden></section>
@@ -118,7 +130,7 @@
 
 <script>
 "use strict";
-const FANER = [["kandidater","Kandidater"],["oversikt","Oversikt"],["hjerne","Hjerne"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
+const FANER = [["kandidater","Kandidater"],["simulering","Simulering"],["oversikt","Oversikt"],["hjerne","Hjerne"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
 const ROLLER = {ceo:"CEO",cfo:"CFO",styreleder:"Styreleder",styremedlem:"Styremedlem",ledelse:"Ledelse",naerstaaende:"Nærstående",ukjent:"Ukjent"};
 const RETNING = {kjop:"Kjøp",salg:"Salg",tildeling:"Tildeling",annet:"Annet"};
 let D = null;
@@ -267,12 +279,18 @@ function kandidatKort(c) {
     el("div", {class: "plan"}, el("dl", {},
       el("dt", {text: "Siste kurs"}), el("dd", {text: `${kr(c.siste_kurs)} (${datoKort(c.siste_kursdag)})`}),
       el("dt", {text: "Inngang, maks"}), el("dd", {text: `${kr(c.limit)} · ${datoKort(c.inn_dato)}`}),
+      el("dt", {text: "Foreslått beløp"}), el("dd", {class: c.for_liten ? "neg" : "", text: c.for_liten ? `${fmt(c.posisjon)} kr (for lite)` : `${fmt(c.posisjon)} kr · ${fmt(c.antall)} aksjer`}),
       el("dt", {text: "Stopp"}), el("dd", {class: "neg", text: `${kr(c.stopp)} (${pst(stoppPst)})`}),
       el("dt", {text: "Break-even"}), el("dd", {text: kr(c.break_even), title: "Kursen som dekker kurtasje og slippage"}),
       el("dt", {text: "Forv. kurs kort/lang"}), el("dd", {text: `${kr(c.kort.maal)} / ${kr(c.lang.maal)}`}),
       el("dt", {text: "Kostnad tur/retur"}), el("dd", {text: (c.kostnad * 100).toLocaleString("nb-NO", {maximumFractionDigits: 1}) + " %"}),
       el("dt", {text: "Omsetning/dag"}), el("dd", {text: c.omsetning_nok ? fmt(c.omsetning_nok / 1e6, 1) + " MNOK" : "–"}))),
     el("div", {class: "parametre"}, ...parametre),
+    el("div", {class: "parametre"}, (() => {
+      const b = el("button", {class: "knapp", text: "➕ Simuler kjøp"});
+      b.addEventListener("click", () => { SIM.forhaandsvalg = c.nokkel; simuleringFane(); visFane("simulering"); window.scrollTo(0, 0); });
+      return b;
+    })()),
     el("details", {class: "hvorfor"}, el("summary", {text: "Hvorfor denne vurderingen?"}),
       el("p", {class: "under", text: `${c.beskrivelse} · publisert ${c.publisert.replace("T", " ").slice(0, 16)}`}),
       ...bidragListe("Hva trekker forventningen opp eller ned, kort sikt:", c.kort.bidrag),
@@ -294,6 +312,7 @@ function kandidaterFane() {
     el("li", {text: "Forventet: netto meravkastning — etter kurtasje og slippage, og utover børsindeksen — dersom du kjøper på åpning og selger på sluttkurs etter horisonten."}),
     el("li", {text: "Sannsynlighet for gevinst: sjansen for at én enkelt handel ender i pluss netto. Enkeltaksjer svinger mye, så den ligger sjelden langt over 50 %."}),
     el("li", {text: "Inngang maks er siste kurs + 1 % (limit). Stopp er inngang minus 2 × gjennomsnittlig daglig svingning. Break-even er kursen som dekker kostnadene. Forventet kurs er det kursen må være på salgsdagen for å gi den forventede nettogevinsten, gitt flatt marked."}),
+    el("li", {text: `Foreslått beløp er det minste av: ${Math.round(st.param.maks_andel * 100)} % av kapitalen (spredning), beløpet der et stopp koster ca. ${Math.round(st.param.risiko * 100)} % av kapitalen (risiko), og ${Math.round(st.param.likviditet_tak * 100)} % av dagsomsetningen (likviditet). Under ${fmt(st.param.min_posisjon)} kr spiser kurtasjen for mye.`}),
     el("li", {text: "Merket (Kjøp / Følg med / Nøytral / Unngå) følger forventningen i kroner, ikke scoren. Kjøp krever at hjernens terskler for forventning og sikkerhet er nådd."}),
     el("li", {text: "Alt er papirhandel og læring, ikke kjøpsråd."}))));
 
@@ -327,8 +346,151 @@ function kandidaterFane() {
   }
   s.append(el("div", {class: "verktoy"}, el("div", {class: "chipvalg"}, ...knapper), sortVelg, borsVelg,
     el("label", {class: "under", for: "visSene"}, seneBoks, " vis eldre enn kort horisont")), liste);
-  s.append(el("p", {class: "under", text: `${st.kandidater.length} selskaper med hendelser siste 10 dager. Posisjon ${fmt(st.param.posisjon)} kr.`}));
+  s.append(el("p", {class: "under", text: `${st.kandidater.length} selskaper med hendelser siste 10 dager. Papirkapital ${fmt(st.param.kapital)} kr.`}));
   tegn();
+}
+
+// --- Simulering ------------------------------------------------------------
+// Egen papirportefølje lagres i nettleseren på denne enheten (localStorage).
+// Den følges mot ekte dagskurser i data.json: inngang på åpningskurs på
+// inngangsdagen (ikke fylt hvis åpningen er over limit), stopp hvis dagens
+// laveste går under stoppen, salg på sluttkurs på salgsdagen.
+const SIM = {nokkel: "momentum.simulering.v1", forhaandsvalg: null};
+function simLes() { try { return JSON.parse(localStorage.getItem(SIM.nokkel) || "[]"); } catch { return SIM.minne || []; } }
+function simLagre(l) { SIM.minne = l; try { localStorage.setItem(SIM.nokkel, JSON.stringify(l)); } catch {} }
+
+function simEvaluer(p) {
+  const k = (D.kurser || {})[p.yahoo];
+  const ut = {...p, status: "venter", inn: null, ut: null, ut_dato: null, siste: null, antall: null};
+  if (!k) return {...ut, status: "ingen kurs"};
+  ut.siste = k.close[k.close.length - 1];
+  const i = k.dato.findIndex(d => d >= p.inn_dato);
+  if (i < 0) return ut;
+  if (k.open[i] == null || k.open[i] > p.limit) return {...ut, status: "ikke fylt", ut_dato: k.dato[i]};
+  ut.inn = k.open[i]; ut.inn_faktisk_dato = k.dato[i]; ut.antall = p.belop / ut.inn; ut.status = "åpen";
+  for (let j = i; j < k.dato.length; j++) {
+    if (p.manuelt_ut && k.dato[j] >= p.manuelt_ut) { ut.status = "solgt"; ut.ut = k.close[j]; ut.ut_dato = k.dato[j]; break; }
+    if (k.low[j] != null && k.low[j] <= p.stopp) { ut.status = "stoppet"; ut.ut = Math.min(k.open[j] || p.stopp, p.stopp); ut.ut_dato = k.dato[j]; break; }
+    if (k.dato[j] >= p.ut_dato) { ut.status = "solgt"; ut.ut = k.close[j]; ut.ut_dato = k.dato[j]; break; }
+  }
+  const pris = ut.status === "åpen" ? ut.siste : ut.ut;
+  ut.brutto_kr = ut.antall * (pris - ut.inn);
+  ut.kost_kr = p.belop * p.kostnad;
+  ut.netto_kr = ut.brutto_kr - ut.kost_kr;
+  ut.netto = ut.netto_kr / p.belop;
+  const idx = (D.kurser || {})[{OL: "OSEBX.OL", ST: "^OMXSPI", HE: "^OMXH25", CO: "^OMXC25"}[p.bors]];
+  if (idx) {
+    const a = idx.dato.findIndex(d => d >= ut.inn_faktisk_dato), slutt = ut.status === "åpen" ? idx.dato.length - 1 : idx.dato.findIndex(d => d >= ut.ut_dato);
+    if (a >= 0 && slutt >= a) ut.marked = idx.close[slutt] / (idx.open[a] || idx.close[a]) - 1;
+  }
+  return ut;
+}
+
+function skala(p) {
+  // Stopp — inngang — break-even — forventet kurs, med siste kurs som markør.
+  const verdier = [p.stopp, p.inn || p.limit, p.limit * (1 + p.kostnad), p.maal, p.status === "åpen" ? p.siste : p.ut].filter(v => v);
+  const lo = Math.min(...verdier) * 0.995, hi = Math.max(...verdier) * 1.005, x = v => `${100 * (v - lo) / (hi - lo)}%`;
+  const merke = (v, farge, tittel) => v ? el("i", {style: `left:${x(v)};background:${farge}`, title: tittel}) : null;
+  return el("div", {class: "skala", title: "Rød = stopp, grå = inngang, gul = break-even, grønn = forventet kurs, svart = nå"},
+    merke(p.stopp, "var(--neg)", "Stopp"), merke(p.inn || p.limit, "var(--dempet)", "Inngang"),
+    merke(p.limit * (1 + p.kostnad), "var(--gul)", "Break-even"), merke(p.maal, "var(--pos)", "Forventet kurs"),
+    merke(p.status === "åpen" ? p.siste : p.ut, "var(--tekst)", "Nå / salg"));
+}
+
+function simuleringFane() {
+  const s = document.getElementById("simulering"), H = D.hjerne || {}, st = H.status;
+  s.replaceChildren();
+
+  // 1) Din papirportefølje
+  s.append(el("h2", {text: "Din papirportefølje"}));
+  s.append(el("p", {class: "under", text: "Lagres bare i denne nettleseren. Følges mot ekte dagskurser: kjøp på åpning (ikke fylt over limit), stopp når dagens laveste går under, salg på sluttkurs på salgsdagen. Kurtasje og slippage er trukket fra."}));
+  const kand = (st && st.kandidater) || [];
+  if (kand.length) {
+    const velg = el("select", {}, ...kand.map(c => el("option", {value: c.nokkel, text: `${c.rang}. ${c.navn} (${c.ticker}) · score ${c.score}`})));
+    if (SIM.forhaandsvalg) velg.value = SIM.forhaandsvalg;
+    const belop = el("input", {type: "number", min: "100", step: "100", value: String(Math.round(st.param.posisjon))});
+    const hor = el("select", {}, el("option", {value: "kort", text: "Kort sikt"}), el("option", {value: "lang", text: "Lang sikt"}));
+    const limit = el("input", {type: "number", step: "0.01"}), stopp = el("input", {type: "number", step: "0.01"});
+    const fyll = () => { const c = kand.find(x => x.nokkel === velg.value); if (!c) return;
+      limit.value = c.limit.toFixed(2); stopp.value = c.stopp.toFixed(2);
+      hor.value = c.kjop_horisont === "lang" ? "lang" : "kort"; belop.value = String(Math.round(c.posisjon)); };
+    velg.addEventListener("input", fyll); fyll();
+    const leggTil = el("button", {class: "knapp", text: "Kjøp på papiret"});
+    leggTil.addEventListener("click", () => {
+      const c = kand.find(x => x.nokkel === velg.value); if (!c) return;
+      const h = c[hor.value];
+      const liste = simLes();
+      liste.push({id: Date.now(), nokkel: c.nokkel, navn: c.navn, ticker: c.ticker, yahoo: c.yahoo, bors: c.bors,
+        inn_dato: c.inn_dato, limit: +limit.value, stopp: +stopp.value, belop: Math.max(100, +belop.value),
+        horisont: hor.value, ut_dato: h.ut_dato, maal: c.limit > 0 ? (+limit.value) * (h.maal / c.limit) : h.maal,
+        forventet: h.forventet, kostnad: c.kostnad, opprettet: new Date().toISOString().slice(0, 10)});
+      simLagre(liste); SIM.forhaandsvalg = null; simuleringFane();
+    });
+    s.append(el("div", {class: "sim-skjema"},
+      el("label", {class: "bred"}, "Kandidat", velg), el("label", {}, "Beløp (kr)", belop), el("label", {}, "Horisont", hor),
+      el("label", {}, "Maks inngang", limit), el("label", {}, "Stopp", stopp), leggTil));
+  }
+
+  const mine = simLes().map(simEvaluer);
+  const fylt = mine.filter(p => p.inn != null);
+  const sum = (f) => fylt.reduce((a, p) => a + (f(p) || 0), 0);
+  const investert = sum(p => p.belop), netto = sum(p => p.netto_kr);
+  s.append(el("div", {class: "kpier", style: "margin-top:12px"},
+    kpi(`${netto >= 0 ? "+" : "−"}${fmt(Math.abs(netto))} kr`, "resultat etter kostnader"),
+    kpi(investert ? pst(netto / investert) : "–", `på ${fmt(investert)} kr investert`),
+    kpi(`${fylt.filter(p => p.status === "åpen").length} / ${fylt.filter(p => p.status !== "åpen").length}`, "åpne / avsluttede"),
+    kpi(fylt.length ? Math.round(100 * fylt.filter(p => p.netto > 0).length / fylt.length) + " %" : "–", "i pluss")));
+  if (!mine.length) s.append(el("div", {class: "tabellramme"}, el("div", {class: "tom", text: "Ingen papirkjøp ennå. Velg en kandidat over, eller trykk «Simuler kjøp» på Kandidater-fanen."})));
+  for (const p of mine.slice().reverse()) {
+    const slett = el("button", {class: "knapp liten", text: "Fjern"});
+    slett.addEventListener("click", () => { simLagre(simLes().filter(x => x.id !== p.id)); simuleringFane(); });
+    const handling = [slett];
+    if (p.status === "åpen") {
+      const selg = el("button", {class: "knapp liten", text: "Selg nå"});
+      selg.addEventListener("click", () => { simLagre(simLes().map(x => x.id === p.id ? {...x, manuelt_ut: D.tall.siste_kurs} : x)); simuleringFane(); });
+      handling.unshift(selg);
+    }
+    const statusTekst = {venter: `Venter på åpning ${datoKort(p.inn_dato)}`, "ikke fylt": `Ikke fylt — åpnet over ${kr(p.limit)}`, "ingen kurs": "Mangler kurs",
+      åpen: `Åpen · selges ${datoKort(p.ut_dato)}`, stoppet: `Stoppet ut ${datoKort(p.ut_dato)}`, solgt: `Solgt ${datoKort(p.ut_dato)}`}[p.status] || p.status;
+    s.append(el("div", {class: "pos-kort"},
+      el("div", {}, el("div", {class: "navn", text: p.navn}), el("div", {class: "tick", text: `${p.ticker} · ${p.horisont} sikt · ${fmt(p.belop)} kr`}),
+        el("div", {class: "stat", text: statusTekst})),
+      el("div", {}, el("div", {class: "smaa", text: "Inngang → nå/salg"}),
+        el("div", {text: p.inn ? `${kr(p.inn)} → ${kr(p.status === "åpen" ? p.siste : p.ut)}` : `maks ${kr(p.limit)}`})),
+      el("div", {}, el("div", {class: "smaa", text: "Resultat netto"}),
+        el("div", {class: "stor " + klasse(p.netto_kr), text: p.netto_kr != null ? `${p.netto_kr >= 0 ? "+" : "−"}${fmt(Math.abs(p.netto_kr))} kr` : "–"}),
+        el("div", {class: "smaa", text: p.netto != null ? `${pst(p.netto)} · marked ${pst(p.marked)}` : `forventet ${pst(p.forventet)}`})),
+      el("div", {}, skala(p), el("div", {class: "smaa", text: `stopp ${kr(p.stopp)} · mål ${kr(p.maal)}`})),
+      el("div", {style: "display:flex;gap:6px;flex-wrap:wrap"}, ...handling)));
+  }
+
+  // 2) Hjernens papirportefølje
+  s.append(el("h2", {text: "Hjernens papirportefølje"}));
+  if (!st) { s.append(el("div", {class: "tom", text: "Hjernen har ikke kjørt ennå."})); return; }
+  const tr = st.trades, p = st.param;
+  s.append(el("p", {class: "under", text: `Start ${fmt(p.kapital)} kr. Hjernen handler selv når forventet netto meravkastning er over ${pst(p.min_edge)} og sikkerheten over ${Math.round(p.min_sikkerhet * 100)} %. Posisjon: maks ${Math.round(p.maks_andel * 100)} % av kapitalen, ca. ${Math.round(p.risiko * 100)} % risiko til stopp, maks ${Math.round(p.likviditet_tak * 100)} % av dagsomsetningen; maks ${p.maks_apne} samtidig, stopp ${p.stopp_atr} × ATR, salg etter ${p.horisont} handelsdager. Spilt av dag for dag uten å se fremtiden.`}));
+  s.append(el("div", {class: "kpier"},
+    kpi(fmt(st.egenkapital_slutt) + " kr", `verdi (start ${fmt(p.kapital)} kr)`),
+    kpi(pst(st.egenkapital_slutt / p.kapital - 1), "avkastning totalt"),
+    kpi(`${fmt(tr.lukket)} / ${fmt(tr.apne)}`, "lukket / åpne"),
+    kpi(tr.treff != null ? Math.round(tr.treff * 100) + " %" : "–", "treffrate"),
+    kpi(pst(tr.snitt_netto), "snitt netto per handel")));
+  const ek = H.egenkapital || [], forste = (H.trades || []).map(t => t.inn_dato).sort()[0];
+  const fra = forste ? Math.max(0, ek.findIndex(e => e.dato >= forste) - 5) : Math.max(0, ek.length - 60);
+  s.append(graf(ek.slice(fra), p.kapital));
+  s.append(el("h2", {text: "Hjernens handler"}));
+  s.append(tabell([
+    {navn: "Inn", vis: r => r.inn_dato},
+    {navn: "Selskap", vis: r => r.navn},
+    {navn: "Beløp", t: 1, vis: r => fmt(r.belop)},
+    {navn: "Inngang", t: 1, vis: r => kr(r.inn)},
+    {navn: "Stopp", t: 1, vis: r => kr(r.stopp)},
+    {navn: "Ut", vis: r => r.status === "åpen" ? `planlagt ${r.plan_ut_dato || "–"}` : r.ut_dato},
+    {navn: "Status", vis: r => r.status},
+    {navn: "Netto", t: 1, vis: r => r.status === "åpen" ? pst(r.raa) + " (åpen, brutto)" : pst(r.netto), kl: r => klasse(r.status === "åpen" ? r.raa : r.netto)},
+    {navn: "Kr", t: 1, vis: r => r.pnl_kr != null ? fmt(r.pnl_kr) : "–", kl: r => klasse(r.pnl_kr)},
+    {navn: "Forventet", t: 1, vis: r => pst(r.pred)},
+  ], H.trades || [], "Ingen papirhandler ennå — hjernen har ikke funnet noe den har tro på."));
 }
 
 function graf(punkter, startverdi) {
@@ -360,14 +522,9 @@ function hjerneFane() {
     `og sikkerheten over ${Math.round(p.min_sikkerhet * 100)} %. Posisjon ${fmt(p.posisjon)} kr, maks ${p.maks_apne} åpne.`}));
   s.append(el("div", {class: "kpier"},
     kpi(fmt(st.hendelser_vurdert), "hendelser vurdert"),
-    kpi(pst(tr.snitt_netto), "snitt netto per papirhandel"),
     kpi(pst(st.referanse_alle_hendelser), "snitt hvis man tok alle"),
-    kpi(fmt(tr.pnl_kr) + " kr", "resultat lukkede"),
-    kpi(fmt(tr.stoppet), "stoppet ut")));
-  // Vis fra litt før første papirhandel (før det står porteføljen bare stille).
-  const ek = H.egenkapital || [], forste = (H.trades || []).map(t => t.inn_dato).sort()[0];
-  const fra = forste ? Math.max(0, ek.findIndex(e => e.dato >= forste) - 5) : Math.max(0, ek.length - 60);
-  s.append(el("h2", {text: "Papirporteføljen"}), graf(ek.slice(fra), p.kapital));
+    kpi(k.rangkorrelasjon == null ? "–" : k.rangkorrelasjon.toLocaleString("nb-NO"), "rangkorrelasjon (kort)")));
+  s.append(el("p", {class: "under", text: "Papirhandlene hjernen gjør med det den har lært, ligger under fanen Simulering."}));
 
   s.append(el("h2", {text: "Lærer den noe? Forventet mot faktisk utfall"}));
   s.append(el("p", {class: "under", text: k.rangkorrelasjon == null
@@ -380,18 +537,6 @@ function hjerneFane() {
     {navn: "Faktisk", t: 1, vis: r => pst(r.faktisk), kl: r => klasse(r.faktisk)},
     {navn: "Treff", t: 1, vis: r => Math.round(r.treff * 100) + " %"},
   ], k.grupper || [], "Ikke nok vurderinger med kjent utfall."));
-
-  s.append(el("h2", {text: "Papirhandler"}));
-  s.append(tabell([
-    {navn: "Inn", vis: r => r.inn_dato},
-    {navn: "Selskap", vis: r => r.navn},
-    {navn: "Inngang", t: 1, vis: r => kr(r.inn)},
-    {navn: "Stopp", t: 1, vis: r => kr(r.stopp)},
-    {navn: "Ut", vis: r => r.status === "åpen" ? `planlagt ${r.plan_ut_dato || "–"}` : r.ut_dato},
-    {navn: "Status", vis: r => r.status},
-    {navn: "Netto", t: 1, vis: r => r.status === "åpen" ? pst(r.raa) + " (åpen)" : pst(r.netto), kl: r => klasse(r.status === "åpen" ? r.raa : r.netto)},
-    {navn: "Forventet", t: 1, vis: r => pst(r.pred)},
-  ], H.trades || [], "Ingen papirhandler ennå — hjernen har ikke funnet noe den har tro på."));
 
   const eff = [];
   for (const [f, vs] of Object.entries((st.modell || {}).effekter || {})) for (const [v, e] of Object.entries(vs)) eff.push({f, v, ...e});
@@ -554,7 +699,7 @@ async function start() {
     return;
   }
   document.getElementById("generert").textContent = "Oppdatert " + D.generert.replace("T", " ").slice(0, 16);
-  kandidaterFane(); oversikt(); hjerneFane(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
+  kandidaterFane(); simuleringFane(); oversikt(); hjerneFane(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
     const knapp = document.getElementById("varselknapp");
