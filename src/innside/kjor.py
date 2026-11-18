@@ -13,7 +13,7 @@ from src.sources import mfn
 
 # Bump når regler/prompt endres; ny versjon behandler alt på nytt og
 # gamle rader blir stående for sammenligning.
-EKSTRAKSJON_VERSJON = "e1"
+EKSTRAKSJON_VERSJON = "e2"  # e2: beholdning_etter, større svarbudsjett
 
 _FERDIG = ("ok", "ingen_handler")
 
@@ -50,18 +50,19 @@ def _marker(con, nyhet_id: int, status: str, detalj: str, na: str) -> None:
 
 
 def _lagre_handler(con, n, handler: list[Handel], kilde: str, korreksjon: bool) -> None:
-    con.execute("DELETE FROM innsidehandler WHERE nyhet_id = ? AND versjon = ?", (n["id"], EKSTRAKSJON_VERSJON))
+    # Tabellen holder siste uttrekk per melding: eldre versjoner erstattes.
+    con.execute("DELETE FROM innsidehandler WHERE nyhet_id = ?", (n["id"],))
     for i, h in enumerate(handler):
         con.execute(
             "INSERT INTO innsidehandler (nyhet_id, linje, versjon, kilde, selskap_slug, publisert, "
             " er_korreksjon, person, rolle_tekst, rolle, naerstaaende, retning, instrument, antall, "
-            " pris, valuta, verdi, transaksjonsdato, noekkel) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " pris, valuta, verdi, transaksjonsdato, noekkel, beholdning_etter) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 n["id"], i, EKSTRAKSJON_VERSJON, kilde, n["selskap_slug"], n["publisert"],
                 int(korreksjon), h.person, h.rolle_tekst, h.rolle, int(h.naerstaaende),
                 h.retning, h.instrument, h.antall, h.pris, h.valuta, h.verdi,
-                h.transaksjonsdato, noekkel(n["selskap_slug"], h),
+                h.transaksjonsdato, noekkel(n["selskap_slug"], h), h.beholdning_etter,
             ),
         )
     if korreksjon and handler:
@@ -126,6 +127,7 @@ def kjor(con: sqlite3.Connection, maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, he
             _lagre_handler(con, n, handler, kilde, korr)
             _marker(con, n["id"], "ok", f"{kilde}: {len(handler)} handler", na)
         else:
+            con.execute("DELETE FROM innsidehandler WHERE nyhet_id = ?", (n["id"],))
             _marker(con, n["id"], "ingen_handler", kilde, na)
             res["ingen_handler"] += 1
         con.commit()

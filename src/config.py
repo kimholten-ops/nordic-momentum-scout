@@ -29,6 +29,10 @@ TZ = ZoneInfo("Europe/Oslo")
 # Du kan lage egne filtrerte feeds på mfn.se og lime inn URL-en her,
 # f.eks. kun Oslo Børs + Euronext Growth + Small Cap Stockholm.
 MFN_FEED_URL = env("MFN_FEED_URL", "https://mfn.se/all/s/nordic")
+# Feeden viser bare de ~50 nyeste meldingene uten limit. GitHub forsinker
+# cron kraftig (i praksis 2-3 kjøringer i døgnet), så hver poll henter de
+# siste N meldingene og fyller hullet siden forrige kjøring. 500 ≈ 1,5 døgn.
+MFN_POLL_LIMIT = int(env("MFN_POLL_LIMIT", "500"))
 
 # Vær en høflig robot. Identifiser deg og ikke poll oftere enn nødvendig.
 USER_AGENT = env(
@@ -85,6 +89,31 @@ INNSIDE_MAKS_LLM_KALL = int(env("INNSIDE_MAKS_LLM_KALL", "40"))
 # Telegram-varsel for innsidesignaler er av som standard: i papirhandelsfasen
 # skal signalene logges og måles før de varsler.
 INNSIDE_VARSLE = env("INNSIDE_VARSLE", "0") == "1"
+
+# --- Markedsindekser (meravkastning) -----------------------------------------
+# Børssuffiks -> Yahoo-indeks. Brukes til å trekke markedet fra avkastningen.
+INDEKSER = {".OL": "OSEBX.OL", ".ST": "^OMXSPI", ".HE": "^OMXH25", ".CO": "^OMXC25"}
+KURSHISTORIKK_DAGER = int(env("KURSHISTORIKK_DAGER", "800"))
+
+# --- Handelskostnader (backtest og papirhandel) -------------------------------
+# Kurtasje i kroner per handel og posisjonsstørrelse avgjør kurtasje i prosent;
+# slippage avhenger av likviditet (median daglig omsetning siste 20 dager, NOK).
+KURTASJE_KR = float(env("KURTASJE_KR", "29"))
+POSISJON_KR = float(env("POSISJON_KR", "3300"))
+# Slippage PER SIDE ≈ halve spreaden: likvide 0,1 %, mellomstore 0,4 %, små 1 %.
+SLIPPAGE_ETTER_OMSETNING = [(50_000_000, 0.001), (5_000_000, 0.004), (0, 0.01)]
+
+# --- Hjerne (src/hjerne/) -------------------------------------------------------
+HJERNE_HORISONT = int(env("HJERNE_HORISONT", "5"))          # handelsdager i en trade (kort sikt)
+HJERNE_HORISONT_LANG = int(env("HJERNE_HORISONT_LANG", "20"))  # lang sikt på kandidatsiden
+HJERNE_HALVERINGSTID = float(env("HJERNE_HALVERINGSTID", "30"))  # dager: nyere utfall veier mer
+HJERNE_PRIOR_STYRKE = float(env("HJERNE_PRIOR_STYRKE", "15"))  # krymping mot 0 (antall "late" observasjoner)
+HJERNE_MIN_EDGE = float(env("HJERNE_MIN_EDGE", "0.005"))    # forventet netto meravkastning for å handle
+HJERNE_MIN_SIKKERHET = float(env("HJERNE_MIN_SIKKERHET", "0.6"))  # P(netto meravkastning > 0)
+HJERNE_MAKS_APNE = int(env("HJERNE_MAKS_APNE", "3"))
+HJERNE_KAPITAL = float(env("HJERNE_KAPITAL", "10000"))
+HJERNE_STOPP_ATR = float(env("HJERNE_STOPP_ATR", "2.0"))    # stopp = inngang - k x ATR20
+HJERNE_VARSLE = env("HJERNE_VARSLE", "1") == "1"
 
 # --- Børstid --------------------------------------------------------------
 MARKET_OPEN = (9, 0)

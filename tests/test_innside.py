@@ -210,14 +210,32 @@ def test_signal_bruker_ikke_kursdata():
 
 # --- Backtest og mapping ---------------------------------------------------
 
-def test_backtest_inngang_er_dagen_etter_publisering(con, monkeypatch):
-    from src import innside_backtest as bt
-    monkeypatch.setattr(bt, "KOSTNAD", 0.0)
-    kurs = (["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"],
-            {"2026-11-09": (90, 91), "2026-11-10": (100, 101), "2026-11-11": (110, 120), "2026-11-12": (120, 130)})
-    # publisert 10. nov (midt på dagen): inngang = åpning 11. nov (110), IKKE 10. nov
-    assert bt.avkastning(kurs, "2026-11-10T09:00:00", 1) == pytest.approx(130 / 110 - 1)
-    assert bt.avkastning(kurs, "2026-11-10T09:00:00", 5) is None  # for kort historikk, ikke imputert
+def _serie(rader):
+    from src.marked import Serie
+    return Serie([r[0] for r in rader], [r[1] for r in rader], [r[2] for r in rader],
+                 [r[3] for r in rader], [r[4] for r in rader], [r[5] for r in rader])
+
+
+def test_utfall_inngang_dagen_etter_publisering_og_markedsjustert(monkeypatch):
+    from src import marked
+    monkeypatch.setattr(marked, "kostnad", lambda oms, posisjon_kr=0: 0.0)
+    aksje = _serie([("2026-11-09", 90, 92, 89, 91, 1000), ("2026-11-10", 100, 102, 99, 101, 1000),
+                    ("2026-11-11", 110, 121, 109, 120, 1000), ("2026-11-12", 120, 131, 119, 130, 1000)])
+    indeks = _serie([("2026-11-10", 1000, 0, 0, 1000, 0), ("2026-11-11", 1000, 0, 0, 1010, 0),
+                     ("2026-11-12", 1010, 0, 0, 1050, 0)])
+    k = {"ABC.OL": aksje, "OSEBX.OL": indeks}
+    u = marked.utfall(k, "ABC.OL", "2026-11-10T09:00:00", 1)
+    # inngang = åpning 11. nov (110), IKKE 10. nov; utgang = close 12. nov
+    assert (u.inn_dato, u.inn, u.ut) == ("2026-11-11", 110, 130)
+    assert u.marked == pytest.approx(1050 / 1000 - 1)
+    assert u.mer == pytest.approx(130 / 110 - 1 - 0.05)
+    assert marked.utfall(k, "ABC.OL", "2026-11-10T09:00:00", 5) is None  # ikke imputert
+
+
+def test_kostnad_avhenger_av_likviditet():
+    from src import marked
+    assert marked.kostnad(100_000_000) < marked.kostnad(10_000_000) < marked.kostnad(1_000_000)
+    assert marked.kostnad(None) == marked.kostnad(0)
 
 
 def test_backtest_kjor_rapporterer_manglende_kurs(con, monkeypatch):
@@ -234,6 +252,9 @@ def test_map_velg_krever_nordisk_suffiks_og_navnetreff():
     kand = [{"symbol": "3MC.SG", "shortname": "Multiconsult ASA"}, {"symbol": "MULTI.OL", "shortname": "MULTICONSULT"}]
     k, sikker = velg("Multiconsult ASA", kand)
     assert k["symbol"] == "MULTI.OL" and sikker
+    from scripts.map_innside import brett, isiner
+    assert brett("SpareBank 1 Østlandet") == "SpareBank 1 Ostlandet"
+    assert isiner(["ISIN: FI0009000459 og NO0010751910", "FI0009000459"]) == ["FI0009000459", "NO0010751910"]
     k, sikker = velg("Helt Annet Navn", [{"symbol": "XYZ.OL", "shortname": "Noe Annet"}])
     assert k["symbol"] == "XYZ.OL" and not sikker
     assert velg("Kesko", [{"symbol": "KESKOBU0126.HE", "shortname": "Kesko Oyj MO 26"}])[0] is None
@@ -249,3 +270,31 @@ def test_dashboard_eksport_en_signalrad_per_selskap_og_dag(con, monkeypatch):
     d = ed.bygg(con)
     assert len(d["signaler"]) == 1 and d["tall"]["signaler"] == 3
     assert set(d) >= {"generert", "tall", "signaler", "handler", "nyheter", "backtest", "logg"}
+
+
+def test_varsel_escaper_html_i_navn(con, monkeypatch):
+    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00",
+           _kjop_tekst("Smith & <Co> AS", "CEO", 20000, 50, "2026-11-09"))
+    ekstraksjon.kjor(con)
+    signal.bygg_signaler(con)
+    s = con.execute("SELECT * FROM innside_signaler").fetchone()
+    tekst = signal.formater_varsel(con, s)
+    assert "Smith &amp; &lt;Co&gt; AS" in tekst
+
+
+def test_telegram_faller_tilbake_til_ren_tekst(monkeypatch):
+    from src import notify
+    monkeypatch.setattr(notify, "TELEGRAM_TOKEN", "t")
+    monkeypatch.setattr(notify, "TELEGRAM_CHAT_ID", "1")
+    kall = []
+
+    class R:
+        def __init__(self, kode, tekst=""): self.status_code, self.text, self.ok = kode, tekst, kode == 200
+
+    def post(url, json=None, timeout=None):
+        kall.append(json)
+        return R(400, "Bad Request: can't parse entities") if "parse_mode" in json else R(200)
+    monkeypatch.setattr(notify.requests, "post", post)
+    assert notify.send("<b>Feil:</b> a < b")
+    assert kall[-1]["text"] == "Feil: a < b" and "parse_mode" not in kall[-1]

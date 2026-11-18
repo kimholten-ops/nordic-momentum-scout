@@ -1,0 +1,15 @@
+{
+  "name": "Momentum-varsling",
+  "short_name": "Momentum",
+  "description": "Innsidekjøp, nyheter og papirhandel på nordisk børs",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f7f5",
+  "theme_color": "#0f6e56",
+  "lang": "nb",
+  "icons": [
+    {"src": "ikon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "ikon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

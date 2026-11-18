@@ -35,6 +35,8 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Eksporter data
+        env:
+          WEBPUSH_VAPID_PUBLIC: ${{ vars.WEBPUSH_VAPID_PUBLIC }}
         run: python -m src.eksport_dashboard
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
