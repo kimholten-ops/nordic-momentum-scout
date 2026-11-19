@@ -147,4 +147,11 @@ def kjor(con: sqlite3.Connection, maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, he
             _marker(con, n["id"], "ingen_handler", kilde, na)
             res["ingen_handler"] += 1
         con.commit()
+    # Ferdig tolkede innsidemeldinger trenger ikke brødteksten lenger (den kan
+    # hentes fra MFN igjen). Holder databasen, som committes til git, liten.
+    con.execute(
+        "UPDATE nyheter SET brodtekst = NULL WHERE brodtekst IS NOT NULL AND id IN "
+        "(SELECT nyhet_id FROM innside_behandlet WHERE status IN ('ok', 'ingen_handler'))"
+    )
+    con.commit()
     return res

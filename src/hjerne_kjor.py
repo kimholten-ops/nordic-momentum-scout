@@ -153,6 +153,20 @@ def kjor(varsle_nye: bool = HJERNE_VARSLE) -> dict:
     return status | {"varslet": varslet, "kandidater": len(res.forslag)}
 
 
+def _komprimer() -> None:
+    """Hjernetabellene skrives på nytt hver kjøring og etterlater tomme sider.
+    VACUUM holder databasefilen (som committes til git) under GitHubs grense."""
+    import sqlite3
+
+    from src.config import DB_PATH
+    try:
+        c = sqlite3.connect(DB_PATH)
+        c.execute("VACUUM")
+        c.close()
+    except sqlite3.Error as e:
+        print(f"VACUUM feilet: {e}")
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--ikke-varsle", action="store_true")
@@ -163,6 +177,7 @@ def main() -> int:
         print(f"FEIL: {type(e).__name__}: {e}", file=sys.stderr)
         send(f"⚠️ hjerne feilet: {esc(type(e).__name__)}: {esc(e)}")
         return 1
+    _komprimer()
     t, k = s["trades"], s["kalibrering"]
     print(f"Vurdert {s['hendelser_vurdert']} hendelser ({s['hendelser_uten_kurs']} uten kurs).")
     print(f"Papirhandler: {t['lukket']} lukket, {t['apne']} åpne, treff {t['treff']}, snitt netto {t['snitt_netto']}, "
