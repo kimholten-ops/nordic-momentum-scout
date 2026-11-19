@@ -108,20 +108,24 @@ def test_db_lagring_bruker_repofila_naar_release_mangler(tmp_path, monkeypatch):
 
     f = tmp_path / "m.db"
     db.init(f)
-    monkeypatch.setattr(db_lagring, "_release_finnes", lambda: False)
+    monkeypatch.setattr(db_lagring, "_release_status", lambda: "mangler")
     monkeypatch.setattr(db_lagring, "TMP", tmp_path / "tmp")
     assert db_lagring.hent(f) == 0 and f.exists()
+    monkeypatch.setattr(db_lagring, "_release_status", lambda: "ukjent")
+    assert db_lagring.hent(f) == 1  # aldri fortsett på en gammel kopi ved tvil
 
 
 def test_db_lagring_stopper_hvis_release_finnes_men_nedlasting_feiler(tmp_path, monkeypatch):
     from scripts import db_lagring
 
-    monkeypatch.setattr(db_lagring, "_release_finnes", lambda: True)
-    monkeypatch.setattr(db_lagring, "_har_gh", lambda: True)
+    monkeypatch.setattr(db_lagring, "_release_status", lambda: "finnes")
+    monkeypatch.setattr(db_lagring, "_har_gh", lambda: False)
     monkeypatch.setattr(db_lagring, "TMP", tmp_path / "tmp")
     monkeypatch.setattr(db_lagring.time, "sleep", lambda s: None)
 
+    import requests
+
     def feil(*a, **k):
-        raise RuntimeError("nett nede")
-    monkeypatch.setattr(db_lagring, "_gh", feil)
+        raise requests.ConnectionError("nett nede")
+    monkeypatch.setattr(requests, "get", feil)
     assert db_lagring.hent(tmp_path / "m.db") == 1

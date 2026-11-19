@@ -45,13 +45,27 @@ def _har_gh() -> bool:
     return bool(shutil.which("gh") and (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")))
 
 
-def _release_finnes() -> bool:
-    if _har_gh():
-        return _gh("release", "view", TAG, sjekk=False).returncode == 0
+def _release_status() -> str:
+    """«finnes», «mangler» (sikkert 404) eller «ukjent» (nett-/tilgangsfeil)."""
     import requests
 
-    r = requests.get(f"https://api.github.com/repos/{REPO}/releases/tags/{TAG}", timeout=30)
-    return r.status_code == 200
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    hode = {"Authorization": f"Bearer {token}"} if token else {}
+    for forsok in range(3):
+        try:
+            r = requests.get(f"https://api.github.com/repos/{REPO}/releases/tags/{TAG}", headers=hode, timeout=30)
+            if r.status_code == 200:
+                return "finnes"
+            if r.status_code == 404:
+                return "mangler"
+        except requests.RequestException:
+            pass
+        time.sleep(5 * (forsok + 1))
+    return "ukjent"
+
+
+def _release_finnes() -> bool:
+    return _release_status() == "finnes"
 
 
 def _pakk_ut(gz: Path, mål: Path) -> None:
@@ -65,16 +79,19 @@ def _pakk_ut(gz: Path, mål: Path) -> None:
 
 def hent(mål: Path = DB_PATH) -> int:
     TMP.mkdir(parents=True, exist_ok=True)
-    if not _release_finnes():
+    status = _release_status()
+    if status == "ukjent":
+        print("FEIL: fikk ikke sjekket releasen (nett/tilgang). Stopper.", file=sys.stderr)
+        return 1
+    if status == "mangler":
         print(f"Ingen release «{TAG}» ennå: bruker {mål} fra repoet ({mål.stat().st_size if mål.exists() else 0} byte).")
         return 0
     gz = TMP / FIL
     for forsok in range(4):  # vedlegget byttes ikke atomisk: prøv igjen et par ganger
         try:
-            if _har_gh():
-                _gh("release", "download", TAG, "--pattern", FIL, "--dir", str(TMP), "--clobber")
-            else:
-                import requests
+            if not (_har_gh() and _gh("release", "download", TAG, "--pattern", FIL, "--dir", str(TMP),
+                                       "--clobber", sjekk=False).returncode == 0):
+                import requests  # uten gh (PC), eller gh feilet: den åpne lenken
 
                 r = requests.get(f"https://github.com/{REPO}/releases/download/{TAG}/{FIL}", timeout=300)
                 r.raise_for_status()
