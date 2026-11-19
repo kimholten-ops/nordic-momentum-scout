@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS kurser (
     open      REAL, high REAL, low REAL, close REAL,
     volum     INTEGER,
     PRIMARY KEY (yahoo, dato)
-);
+) WITHOUT ROWID;   -- nøkkelen ER tabellen: sparer en tredjedel plass
 
 -- Selskapsregister, speiler universe/tickers.csv.
 CREATE TABLE IF NOT EXISTS selskaper (
@@ -219,6 +219,15 @@ MIGRERINGER = [("innsidehandler", "beholdning_etter", "REAL"), ("hjerne_trades",
 
 
 def _migrer(con: sqlite3.Connection) -> None:
+    # kurser som WITHOUT ROWID (eldre databaser har en egen indeks i tillegg).
+    sql = (con.execute("SELECT sql FROM sqlite_master WHERE name = 'kurser'").fetchone() or [""])[0] or ""
+    if sql and "WITHOUT ROWID" not in sql.upper():
+        con.executescript(
+            "CREATE TABLE kurser_ny (yahoo TEXT NOT NULL, dato TEXT NOT NULL, open REAL, high REAL, low REAL, "
+            " close REAL, volum INTEGER, PRIMARY KEY (yahoo, dato)) WITHOUT ROWID;"
+            "INSERT INTO kurser_ny SELECT yahoo, dato, open, high, low, close, volum FROM kurser;"
+            "DROP TABLE kurser; ALTER TABLE kurser_ny RENAME TO kurser;"
+        )
     for tabell, kolonne, typ in MIGRERINGER:
         finnes = {r[1] for r in con.execute(f"PRAGMA table_info({tabell})")}
         if finnes and kolonne not in finnes:

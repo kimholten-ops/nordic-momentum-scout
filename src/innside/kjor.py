@@ -4,9 +4,10 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
-from src.config import ANTHROPIC_API_KEY, INNSIDE_MAKS_LLM_KALL, TZ
+from src.config import INNSIDE_MAKS_LLM_KALL, TZ
 from src.innside import llm
 from src.innside.deteksjon import er_innsidemelding, er_korreksjon
+from src.innside.fritekst import parse_fritekst
 from src.innside.parser import Handel, parse_strukturert
 from src.klassifisering.llm import KlassifiseringsFeil
 from src.sources import mfn
@@ -27,11 +28,15 @@ def noekkel(slug: str, h: Handel) -> str:
     )
 
 
-def _ubehandlede(con: sqlite3.Connection) -> list[sqlite3.Row]:
+def _ubehandlede(con: sqlite3.Connection, med_venter: bool = True) -> list[sqlite3.Row]:
+    """Innsidemeldinger som ikke er ferdig behandlet. Uten KI tilgjengelig tas
+    de som venter på KI ikke med — ellers ville hver kjøring hentet tusenvis av
+    arkivmeldinger fra MFN på nytt bare for å gi opp igjen."""
+    statuser = _FERDIG if med_venter else (*_FERDIG, "trenger_llm")
     ferdige = {
         r[0] for r in con.execute(
-            f"SELECT nyhet_id FROM innside_behandlet WHERE versjon = ? AND status IN ({','.join('?' * len(_FERDIG))})",
-            (EKSTRAKSJON_VERSJON, *_FERDIG),
+            f"SELECT nyhet_id FROM innside_behandlet WHERE versjon = ? AND status IN ({','.join('?' * len(statuser))})",
+            (EKSTRAKSJON_VERSJON, *statuser),
         )
     }
     rader = con.execute(
@@ -83,11 +88,23 @@ def _lagre_handler(con, n, handler: list[Handel], kilde: str, korreksjon: bool) 
                 )
 
 
+def tolk_med_regler(tekst: str, publisert: str | None) -> tuple[list[Handel] | None, str]:
+    """(handler, kilde) fra regelparserne, eller (None, '') når de gir opp."""
+    handler = parse_strukturert(tekst)
+    if handler:
+        return handler, "regel"
+    handler = parse_fritekst(tekst, publisert)
+    if handler:
+        return handler, "fritekst"
+    return None, ""
+
+
 def kjor(con: sqlite3.Connection, maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, hent_tekst=mfn.hent_brodtekst) -> dict:
     na = datetime.now(TZ).isoformat(timespec="seconds")
     res = {"vurdert": 0, "regel": 0, "llm": 0, "ingen_handler": 0, "trenger_llm": 0, "feilet": 0, "brodtekst_feilet": 0}
 
-    for n in _ubehandlede(con):
+    ki = llm.tilgjengelig() and maks_llm_kall > 0
+    for n in _ubehandlede(con, med_venter=ki):
         res["vurdert"] += 1
         tekst = n["brodtekst"]
         if not tekst:
@@ -103,10 +120,9 @@ def kjor(con: sqlite3.Connection, maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, he
                 )
 
         korr = er_korreksjon(n["tittel"])
-        handler = parse_strukturert(tekst or "")
-        kilde = "regel"
-        if not handler:
-            if res["llm"] >= maks_llm_kall or not ANTHROPIC_API_KEY:
+        handler, kilde = tolk_med_regler(tekst or "", n["publisert"])
+        if handler is None:
+            if res["llm"] >= maks_llm_kall or not ki:
                 _marker(con, n["id"], "trenger_llm", "ingen LLM-kall tilgjengelig", na)
                 res["trenger_llm"] += 1
                 con.commit()

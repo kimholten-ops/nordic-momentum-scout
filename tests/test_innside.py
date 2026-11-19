@@ -138,30 +138,61 @@ def _kjop_tekst(person, rolle, antall, pris, dato):
     )
 
 
-def test_kjor_regel_og_llm_og_ingen_dobbeltbehandling(con, monkeypatch):
+UKJENT_FORMAT = (
+    "Oslo, 10 November 2026: Reference is made to the announcement regarding the transaction. "
+    "Bright Future AS, a company closely related to the CEO, has entered into an agreement as further described "
+    "in the attached form, which sets out the volume and price."
+)
+
+
+def test_kjor_regel_fritekst_og_llm_og_ingen_dobbeltbehandling(con, monkeypatch):
     _nyhet(con, "kesko", "Kesko Oyj - Managers' Transactions", "2026-11-18T14:20:00", (FIX / "innside_kesko.txt").read_text())
     _nyhet(con, "elopak", "Elopak: Mandatory notification of trade by primary insider", "2026-11-10T16:47:00", (FIX / "innside_elopak.txt").read_text())
+    _nyhet(con, "abc", "ABC: Mandatory notification of trade", "2026-11-10T17:00:00", UKJENT_FORMAT)
     _nyhet(con, "equinor", "Equinor: Kvartalsrapport", "2026-11-10T08:00:00", "ikke innside")
-    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "x")
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: True)
     monkeypatch.setattr(llm, "ANTHROPIC_API_KEY", "x")
-    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: _Svar(ELOPAK_SVAR))
+    kall = []
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: kall.append(1) or _Svar(ELOPAK_SVAR))
 
     r = ekstraksjon.kjor(con)
-    assert (r["vurdert"], r["regel"], r["llm"]) == (2, 1, 1)
-    assert con.execute("SELECT COUNT(*) FROM innsidehandler").fetchone()[0] == 4
-    # andre kjøring gjør ingenting
-    assert ekstraksjon.kjor(con)["vurdert"] == 0
+    assert (r["vurdert"], r["regel"], r["llm"]) == (3, 2, 1)   # Kesko (skjema) + Elopak (fritekst) uten KI
+    kilder = dict(con.execute("SELECT selskap_slug, MAX(kilde) FROM innsidehandler GROUP BY selskap_slug").fetchall())
+    assert kilder == {"kesko": "regel", "elopak": "fritekst", "abc": "llm"}
+    assert len(kall) == 1
+    assert ekstraksjon.kjor(con)["vurdert"] == 0  # andre kjøring gjør ingenting
 
 
-def test_uten_api_noekkel_markeres_trenger_llm_og_tas_opp_igjen(con, monkeypatch):
-    _nyhet(con, "elopak", "Elopak: Mandatory notification of trade", "2026-11-10T16:47:00", (FIX / "innside_elopak.txt").read_text())
-    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+def test_uten_ki_venter_meldingen_og_hentes_ikke_paa_nytt(con, monkeypatch):
+    _nyhet(con, "abc", "ABC: Mandatory notification of trade", "2026-11-10T17:00:00", UKJENT_FORMAT)
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     assert ekstraksjon.kjor(con)["trenger_llm"] == 1
-    assert ekstraksjon.kjor(con)["vurdert"] == 1  # ikke ferdig, vurderes på nytt
+    assert ekstraksjon.kjor(con)["vurdert"] == 0       # venter, ingen ny henting
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: True)
+    monkeypatch.setattr(llm, "ANTHROPIC_API_KEY", "x")
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: _Svar(ELOPAK_SVAR))
+    assert ekstraksjon.kjor(con)["llm"] == 1           # tas opp når KI er tilgjengelig
+
+
+def test_ollama_brukes_naar_valgt(monkeypatch):
+    monkeypatch.setattr(llm, "INNSIDE_LLM", "ollama")
+    url = {}
+
+    class R:
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": ELOPAK_SVAR}}
+
+    def post(u, json=None, timeout=None):
+        url["u"], url["model"] = u, json["model"]
+        return R()
+    monkeypatch.setattr(llm.requests, "post", post)
+    assert llm.tilgjengelig()
+    h = llm.trekk_ut("t", "b", "2026-11-10T00:00:00")
+    assert url["u"].endswith("/api/chat") and h[0].antall == 27500
 
 
 def test_korreksjon_erstatter_original_og_duplikat_telles_en_gang(con, monkeypatch):
-    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     t1 = _kjop_tekst("Anna Berg", "CFO", 1000, 50, "2026-11-17")
     t2 = _kjop_tekst("Anna Berg", "CFO", 2000, 50, "2026-11-17")
     _nyhet(con, "multiconsult", "Mandatory notification of trade - primary insider", "2026-11-18T13:14:42", t1, "u1")
@@ -175,7 +206,7 @@ def test_korreksjon_erstatter_original_og_duplikat_telles_en_gang(con, monkeypat
 # --- Signal --------------------------------------------------------------
 
 def test_signal_ceo_kjop_over_terskel_og_salg_ignoreres(con, monkeypatch):
-    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00", _kjop_tekst("Per Hansen", "CEO", 20000, 50, "2026-11-09"))
     salg = _kjop_tekst("Kari Nord", "CFO", 90000, 50, "2026-11-09").replace("ACQUISITION", "DISPOSAL")
     _nyhet(con, "xyz", "Mandatory notification of trade", "2026-11-10T09:05:00", salg)
@@ -186,7 +217,7 @@ def test_signal_ceo_kjop_over_terskel_og_salg_ignoreres(con, monkeypatch):
 
 
 def test_signal_klynge_og_ikke_varsle_samme_score_to_ganger(con, monkeypatch):
-    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00", _kjop_tekst("A", "Member of the Board", 2000, 50, "2026-11-09"))
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-12T09:00:00", _kjop_tekst("B", "Member of the Board", 3000, 50, "2026-11-11"))
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-13T09:00:00", _kjop_tekst("C", "Member of the Board", 2000, 50, "2026-11-12"))
@@ -240,7 +271,7 @@ def test_kostnad_avhenger_av_likviditet():
 
 def test_backtest_kjor_rapporterer_manglende_kurs(con, monkeypatch):
     from src import innside_backtest as bt
-    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00", _kjop_tekst("Per", "CEO", 20000, 50, "2026-11-09"))
     ekstraksjon.kjor(con)
     r = bt.kjor(con)
@@ -262,7 +293,7 @@ def test_map_velg_krever_nordisk_suffiks_og_navnetreff():
 
 def test_dashboard_eksport_en_signalrad_per_selskap_og_dag(con, monkeypatch):
     from src import eksport_dashboard as ed
-    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     for i, p in enumerate(["A", "B", "C"]):
         _nyhet(con, "abc", "Mandatory notification of trade", f"2026-11-10T09:0{i}:00", _kjop_tekst(p, "CEO", 20000, 50, "2026-11-09"), f"u{i}")
     ekstraksjon.kjor(con)
@@ -273,7 +304,7 @@ def test_dashboard_eksport_en_signalrad_per_selskap_og_dag(con, monkeypatch):
 
 
 def test_varsel_escaper_html_i_navn(con, monkeypatch):
-    monkeypatch.setattr(ekstraksjon, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00",
            _kjop_tekst("Smith & <Co> AS", "CEO", 20000, 50, "2026-11-09"))
     ekstraksjon.kjor(con)

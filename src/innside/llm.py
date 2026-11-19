@@ -11,7 +11,15 @@ import json
 
 import requests
 
-from src.config import ANTHROPIC_API_KEY, ANTHROPIC_API_URL, ANTHROPIC_TIMEOUT, KLASSIFISERING_MODELL
+from src.config import (
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_API_URL,
+    ANTHROPIC_TIMEOUT,
+    INNSIDE_LLM,
+    KLASSIFISERING_MODELL,
+    OLLAMA_MODELL,
+    OLLAMA_URL,
+)
 from src.innside.parser import INSTRUMENTER, RETNINGER, Handel, rolle_fra_tekst
 from src.klassifisering.llm import KlassifiseringsFeil, _parse_json
 
@@ -84,7 +92,31 @@ def _valider(data: dict) -> list[Handel]:
     return ut
 
 
+def tilgjengelig() -> bool:
+    if INNSIDE_LLM == "ollama":
+        return True
+    return INNSIDE_LLM == "anthropic" and bool(ANTHROPIC_API_KEY)
+
+
+def _kall_ollama(prompt: str) -> str:
+    r = requests.post(
+        f"{OLLAMA_URL.rstrip('/')}/api/chat",
+        json={
+            "model": OLLAMA_MODELL,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0},
+            "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
+        },
+        timeout=300,
+    )
+    r.raise_for_status()
+    return r.json().get("message", {}).get("content", "")
+
+
 def _kall_api(prompt: str, modell: str) -> str:
+    if INNSIDE_LLM == "ollama":
+        return _kall_ollama(prompt)
     if not ANTHROPIC_API_KEY:
         raise KlassifiseringsFeil("ANTHROPIC_API_KEY er ikke satt")
     r = requests.post(

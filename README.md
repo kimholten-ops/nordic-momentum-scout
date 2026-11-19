@@ -51,6 +51,31 @@ datakjøring og publiserer. Slå på under Settings → Pages → Source:
 NB: Pages fra privat repo krever betalt GitHub-abonnement, og siden blir
 offentlig tilgjengelig på nettet (den har `noindex`, men ingen innlogging).
 
+## Arkiv og regelbasert uttrekk (uten KI)
+
+`python -m src.innside.arkiv --fra 2023-01-01` (eller workflowen **Innside
+arkiv**) henter innsidemeldinger fra MFNs åpne JSON-feed
+(`mfn.se/all/s/nordic.json?tag=sub:ci:insider`). Feeden har hele teksten og
+selskapets ticker (børs:symbol), så selskaper mappes automatisk til Yahoo.
+
+Meldingene tolkes med regler, uten KI-kostnad:
+- `src/innside/parser.py`: Nasdaq-skjemaet («Nature of transaction: …»).
+- `src/innside/fritekst.py`: fritekst på norsk/engelsk/svensk/dansk («…, CEO,
+  has on 30 October purchased 10,000 shares at NOK 14.40 …»). Målt mot
+  KI-svar på 635 meldinger: tolker ~43 %, enig i ~97 %. Gir opp ved emisjon,
+  tildeling, opsjoner, egne aksjer, lister og flere handler i én setning.
+
+Det reglene ikke klarer, merkes «trenger_llm». Velg selv hvem som tolker resten
+(`INNSIDE_LLM`): `anthropic` (Haiku, ca. 2–3 øre per melding), `ollama`
+(lokal modell, gratis) eller `av`.
+
+**Ollama på egen PC:** `ollama pull qwen2.5:7b`, så i repomappen:
+```powershell
+$env:INNSIDE_LLM="ollama"; python -m src.innside_kjor --maks-llm-kall 10000
+git add data/momentum.db; git commit -m "data: ollama-uttrekk"; git push
+```
+Regn med 5–20 sekunder per melding avhengig av maskinen.
+
 ## Hjernen (src/hjerne/)
 
 Lærer av utfallet til hver hendelse — innsidekjøp og (når nyhetsklassifiseringen
@@ -62,7 +87,9 @@ har data) klassifiserte nyheter — og simulerer handler med det den har lært.
 - **Modell:** additiv modell med krymping (`HJERNE_PRIOR_STYRKE`) og tidsvekt
   (`HJERNE_HALVERINGSTID` dager), over grove egenskaper: rolle, antall kjøpere
   siste 30 dager, verdi, andel av beholdningen, likviditet, 20-dagers momentum,
-  børs, og for nyheter kategori/retning/overraskelse.
+  6-måneders trend, avstand til 52-ukers topp/bunn, kursreaksjon og volum på
+  meldingsdagen (bare når meldingen kom i børstiden), markedsregime (indeks
+  over/under 200-dagers snitt), børs, og for nyheter kategori/retning/overraskelse.
 - **Walk-forward:** hver dag trenes modellen bare på utfall som var kjent før
   den dagen. Den lærer av alle hendelser, ikke bare dem den handlet.
 - **Papirhandel:** åpner når forventet verdi ≥ `HJERNE_MIN_EDGE` og sikkerhet ≥

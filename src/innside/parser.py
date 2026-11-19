@@ -42,13 +42,15 @@ def rolle_fra_tekst(tekst: str | None) -> tuple[str, bool]:
     kjøper er et annet signal enn at CEO selv kjøper."""
     t = (tekst or "").lower()
     naer = bool(re.search(r"close(?:ly)? (?:associate|related|associated)|nærstående|närstående|related part|closely", t))
-    if re.search(r"\bceo\b|chief executive|administrerende direktør|konsernsjef|verkställande|vd\b|toimitusjohtaja|adm\.? dir", t):
+    if re.search(r"\bceo\b|chief executive|administrerende direktør|konsernsjef|verkställande|vd\b|toimitusjohtaja|adm\.? dir|"
+                 r"daglig leder|adm\. direktør", t):
         return "ceo", naer
     if re.search(r"\bcfo\b|chief financial|finansdirektør|økonomidirektør|ekonomichef|finanschef|talousjohtaja", t):
         return "cfo", naer
-    if re.search(r"chair(?:man|woman|person)?\b|styreleder|styrets leder|ordförande|hallituksen puheenjohtaja", t):
+    if re.search(r"chair(?:man|woman|person)?\b|styreleder|styrets leder|ordförande|hallituksen puheenjohtaja|bestyrelsesformand", t):
         return "styreleder", naer
-    if re.search(r"board member|member of the board|styremedlem|styrets medlem|\bdirector\b|ledamot|hallituksen jäsen", t):
+    if re.search(r"board member|member of the board|styremedlem|styrets medlem|\bdirector\b|ledamot|hallituksen jäsen|"
+                 r"bestyrelsesmedlem|næstformand|nestleder i styret|deputy chair|vice chair", t):
         return "styremedlem", naer
     if naer and not t.strip():
         return "naerstaaende", True

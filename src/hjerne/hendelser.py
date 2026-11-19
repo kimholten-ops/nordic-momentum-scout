@@ -46,20 +46,68 @@ def _boette_andel(andel: float | None) -> str:
     return "ny posisjon" if andel >= 0.9 else ("stor økning" if andel >= 0.25 else "liten økning")
 
 
+BORS_STENGER = "16:20"  # Oslo; tidligst av de nordiske børsene (konservativt)
+
+
+def _r(a: float | None, b: float | None) -> float | None:
+    return a / b - 1 if a and b else None
+
+
 def kursegenskaper(kurser: dict[str, marked.Serie], yahoo: str, publisert: str) -> dict[str, str]:
+    """Egenskaper fra kurs og volum. Alt er kjent FØR inngangen (åpning dagen
+    etter publisering): dag i er inngangsdagen, og bare dager < i brukes."""
     s = kurser.get(yahoo)
     if not s:
         return {}
-    i = s.indeks_etter(publisert[:10])  # inngangsdagen; bare data før i brukes
+    i = s.indeks_etter(publisert[:10])  # inngangsdagen
     ut: dict[str, str] = {}
     oms = marked.til_nok(marked.omsetning_nok(s, i), yahoo)
     ut["likviditet"] = "ukjent" if oms is None else ("høy" if oms >= 50e6 else ("middels" if oms >= 5e6 else "lav"))
-    if i >= 21 and s.close[i - 1] and s.close[i - 21]:
-        r = s.close[i - 1] / s.close[i - 21] - 1
-        ut["momentum20"] = "ned >10%" if r < -0.10 else ("opp >10%" if r > 0.10 else "flat")
-    else:
-        ut["momentum20"] = "ukjent"
+    r = _r(s.close[i - 1], s.close[i - 21]) if i >= 21 else None
+    ut["momentum20"] = "ukjent" if r is None else ("ned >10%" if r < -0.10 else ("opp >10%" if r > 0.10 else "flat"))
     ut["marked"] = (marked.suffiks(yahoo) or "?").lstrip(".")
+
+    # Langsiktig trend (ca. 6 måneder).
+    r = _r(s.close[i - 1], s.close[i - 127]) if i >= 127 else None
+    ut["trend6m"] = "ukjent" if r is None else ("ned >20%" if r < -0.20 else ("opp >20%" if r > 0.20 else "flat"))
+
+    # Avstand til 52-ukers høyeste/laveste sluttkurs.
+    if i >= 200 and s.close[i - 1]:
+        vindu = [c for c in s.close[max(0, i - 252):i] if c]
+        c = s.close[i - 1]
+        ut["uke52"] = ("nær toppen" if c >= 0.95 * max(vindu) else
+                       "nær bunnen" if c <= 1.10 * min(vindu) else "midt i spennet")
+    else:
+        ut["uke52"] = "ukjent"
+
+    # Reaksjon og volum på meldingsdagen — bare når meldingen kom i børstiden
+    # (ellers er reaksjonen ikke kjent før inngangen neste morgen).
+    j = s.indeks_til_og_med(publisert[:10])
+    i_borstid = (j >= 21 and s.datoer[j] == publisert[:10] and publisert[11:16] < BORS_STENGER)
+    if i_borstid:
+        r = _r(s.close[j], s.close[j - 1])
+        idx = kurser.get(marked.indeks_for(yahoo) or "")
+        if r is not None and idx:
+            a = idx.indeks_til_og_med(s.datoer[j])
+            if a >= 1 and idx.datoer[a] == s.datoer[j]:
+                r -= _r(idx.close[a], idx.close[a - 1]) or 0.0
+        ut["reaksjon"] = "ukjent" if r is None else ("ned >3%" if r < -0.03 else ("opp >3%" if r > 0.03 else "rolig"))
+        v = [x for x in s.volum[j - 20:j] if x]
+        med = sorted(v)[len(v) // 2] if v else None
+        rv = s.volum[j] / med if med and s.volum[j] else None
+        ut["volum"] = "ukjent" if rv is None else ("høyt (3x+)" if rv >= 3 else ("forhøyet" if rv >= 1.5 else "normalt"))
+    else:
+        ut["reaksjon"] = ut["volum"] = "etter børstid"
+
+    # Markedsregime: børsens indeks over/under 200-dagers snitt.
+    idx = kurser.get(marked.indeks_for(yahoo) or "")
+    if idx and i >= 1:
+        a = idx.indeks_til_og_med(s.datoer[i - 1])
+        snitt = [c for c in idx.close[max(0, a - 199):a + 1] if c]
+        ut["regime"] = ("ukjent" if a < 199 or len(snitt) < 150 or not idx.close[a] else
+                        "stigende marked" if idx.close[a] > sum(snitt) / len(snitt) else "fallende marked")
+    else:
+        ut["regime"] = "ukjent"
     return ut
 
 

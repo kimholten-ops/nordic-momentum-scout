@@ -14,7 +14,7 @@ from src.universe import last_universe
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--dager", type=int, default=800)
+    p.add_argument("--dager", type=int, default=1600)
     a = p.parse_args()
     with db.session() as con:
         last_universe(con)

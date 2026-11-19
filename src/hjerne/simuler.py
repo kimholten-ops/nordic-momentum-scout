@@ -35,6 +35,7 @@ from src.hjerne.hendelser import Hendelse
 from src.hjerne.modell import Modell, Observasjon, tren
 
 STOPP_MIN, STOPP_MAKS = 0.04, 0.20
+RETREN_DAGER = 7
 LIMIT_PAASLAG = 0.01  # maks inngang = siste sluttkurs + 1 %
 
 
@@ -170,15 +171,20 @@ def kjor(hendelser: list[Hendelse], kurser: dict[str, marked.Serie], p: Param | 
     alle_dager = sorted({d for s in kurser.values() for d in s.datoer if d >= min(planlagt, default=siste_kursdag)})
     modell: Modell | None = None
     trent_med = -1
+    trent_dag: str | None = None
 
-    def tren_til(dag: str) -> Modell:
-        nonlocal modell, trent_med
+    def tren_til(dag: str, tving: bool = False) -> Modell:
+        """Tren på utfall kjent før `dag`. For fart trenes det på nytt høyst
+        hver RETREN_DAGER kalenderdag (som en ukentlig oppdatering i drift);
+        tidsvekten regnes alltid fra treningsdagen."""
+        nonlocal modell, trent_med, trent_dag
         n = 0
         while n < len(obs) and obs[n][0] < dag:
             n += 1
-        if modell is None or n != trent_med:
+        gammel = trent_dag is None or (date.fromisoformat(dag) - date.fromisoformat(trent_dag)).days >= RETREN_DAGER
+        if modell is None or (n != trent_med and (gammel or tving)):
             modell = tren([o for _, o in obs[:n]], dag, p.prior, p.halveringstid)
-            trent_med = n
+            trent_med, trent_dag = n, dag
         return modell
 
     for dag in alle_dager:
@@ -243,7 +249,7 @@ def kjor(hendelser: list[Hendelse], kurser: dict[str, marked.Serie], p: Param | 
         t.raa = t.ut / t.inn - 1 if t.ut else None
 
     # 3) forslag for hendelser uten inngangsdag ennå
-    m = tren_til((date.fromisoformat(siste_kursdag) + timedelta(days=1)).isoformat())
+    m = tren_til((date.fromisoformat(siste_kursdag) + timedelta(days=1)).isoformat(), tving=True)
     res.modell = m
     ledig = p.maks_apne - len(apne)
     rangert = []

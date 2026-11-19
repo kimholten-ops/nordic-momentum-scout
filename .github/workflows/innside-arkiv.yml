@@ -1,0 +1,69 @@
+name: Innside arkiv (MFN, uten KI)
+
+# Manuell jobb (Actions -> Run workflow). Henter innsidemeldinger fra MFNs
+# åpne feed tilbake til «fra», tolker dem med regler (ingen KI-kostnad),
+# mapper selskaper til Yahoo-tickere, henter lang kurshistorikk, kjører
+# hjernen og backtesten, og committer databasen.
+on:
+  workflow_dispatch:
+    inputs:
+      fra:
+        description: "Eldste publiseringsdato (YYYY-MM-DD)"
+        default: "2023-01-01"
+
+concurrency:
+  group: momentum-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  arkiv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
+      INNSIDE_LLM: "av"   # arkivet tolkes bare med regler; resten venter på KI/Ollama
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Hent arkivet fra MFN og tolk med regler
+        run: python -m src.innside.arkiv --fra "${{ inputs.fra }}"
+
+      - name: Lag signaler
+        run: python -m src.innside_kjor --maks-llm-kall 0
+
+      - name: Hent kurshistorikk (nye selskaper og indekser)
+        run: python -m scripts.hent_kurshistorikk --dager 1600
+
+      - name: Hjerne (walk-forward, uten varsel)
+        run: python -m src.hjerne_kjor --ikke-varsle
+
+      - name: Backtest
+        run: |
+          python -m src.innside_backtest | tee backtest.txt
+          { echo '### Backtest innsidekjøp (arkiv)'; echo '```'; cat backtest.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Komprimer databasen
+        run: |
+          python -c "import sqlite3; c=sqlite3.connect('data/momentum.db'); c.execute('VACUUM'); c.close()"
+          ls -la data/
+
+      - name: Commit data og univers
+        run: |
+          git config user.name "momentum-bot"
+          git config user.email "actions@github.com"
+          git add data/momentum.db universe/tickers.csv
+          git diff --staged --quiet && echo "ingen endring" && exit 0
+          git commit -m "data: innside-arkiv fra ${{ inputs.fra }} $(date -u +'%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin ${{ github.ref_name }} && git push && exit 0
+            sleep 5
+          done
+          exit 1

@@ -86,6 +86,13 @@ INNSIDE_FX_NOK = {
     "EUR": float(env("FX_EUR", "11.7")), "USD": float(env("FX_USD", "10.0")),
 }
 INNSIDE_MAKS_LLM_KALL = int(env("INNSIDE_MAKS_LLM_KALL", "40"))
+# Hvem tolker meldinger regelparserne ikke klarer:
+#   "anthropic" — Claude Haiku via API (koster litt, krever ANTHROPIC_API_KEY)
+#   "ollama"    — lokal modell på egen PC (gratis), se README «Ollama»
+#   "av"        — ingen KI; meldingene blir liggende som «trenger_llm»
+INNSIDE_LLM = env("INNSIDE_LLM", "anthropic").lower()
+OLLAMA_URL = env("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODELL = env("OLLAMA_MODELL", "qwen2.5:7b")
 # Telegram-varsel for innsidesignaler er av som standard: i papirhandelsfasen
 # skal signalene logges og måles før de varsler.
 INNSIDE_VARSLE = env("INNSIDE_VARSLE", "0") == "1"
@@ -93,7 +100,7 @@ INNSIDE_VARSLE = env("INNSIDE_VARSLE", "0") == "1"
 # --- Markedsindekser (meravkastning) -----------------------------------------
 # Børssuffiks -> Yahoo-indeks. Brukes til å trekke markedet fra avkastningen.
 INDEKSER = {".OL": "OSEBX.OL", ".ST": "^OMXSPI", ".HE": "^OMXH25", ".CO": "^OMXC25"}
-KURSHISTORIKK_DAGER = int(env("KURSHISTORIKK_DAGER", "800"))
+KURSHISTORIKK_DAGER = int(env("KURSHISTORIKK_DAGER", "1600"))  # fra ca. 2022: arkivet + 52 ukers bakblikk
 
 # --- Handelskostnader (backtest og papirhandel) -------------------------------
 # Kurtasje i kroner per handel og posisjonsstørrelse avgjør kurtasje i prosent;
@@ -106,7 +113,7 @@ SLIPPAGE_ETTER_OMSETNING = [(50_000_000, 0.001), (5_000_000, 0.004), (0, 0.01)]
 # --- Hjerne (src/hjerne/) -------------------------------------------------------
 HJERNE_HORISONT = int(env("HJERNE_HORISONT", "5"))          # handelsdager i en trade (kort sikt)
 HJERNE_HORISONT_LANG = int(env("HJERNE_HORISONT_LANG", "20"))  # lang sikt på kandidatsiden
-HJERNE_HALVERINGSTID = float(env("HJERNE_HALVERINGSTID", "30"))  # dager: nyere utfall veier mer
+HJERNE_HALVERINGSTID = float(env("HJERNE_HALVERINGSTID", "180"))  # dager: nyere utfall veier mer
 HJERNE_PRIOR_STYRKE = float(env("HJERNE_PRIOR_STYRKE", "15"))  # krymping mot 0 (antall "late" observasjoner)
 HJERNE_MIN_EDGE = float(env("HJERNE_MIN_EDGE", "0.005"))    # forventet netto meravkastning for å handle
 HJERNE_MIN_SIKKERHET = float(env("HJERNE_MIN_SIKKERHET", "0.6"))  # P(netto meravkastning > 0)
