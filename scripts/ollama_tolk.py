@@ -4,9 +4,10 @@
   python -m scripts.ollama_tolk --maks 200      # prøverunde
 
 Skriver ett JSON-objekt per melding til data/ollama/tolkninger.jsonl og
-pusher filen jevnlig. Databasen røres ikke her: GitHub-jobbene oppdaterer
-den hele tiden, og en binær SQLite-fil kan ikke slås sammen. Workflowen
-«Importer Ollama-tolkninger» leser jsonl-filen og legger handlene inn.
+pusher filen jevnlig til grenen «ollama-tolkninger» (git-plumbing: arbeids-
+mappen og databasen røres aldri, så det blir ingen konflikter med GitHub-
+jobbene som oppdaterer databasen). Workflowen «Importer Ollama-tolkninger»
+henter filen derfra annenhver time og legger handlene inn.
 
 Kan avbrytes (Ctrl+C) og startes igjen: meldinger som står i filen, hoppes over.
 Rekkefølge: selskaper vi har kurser for først, nyeste først. Titler som
@@ -73,18 +74,40 @@ def ferdige() -> set[str]:
     return ut
 
 
-def git(*args: str) -> bool:
-    r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+GREN = "ollama-tolkninger"
+FIL_I_GREN = "data/ollama/tolkninger.jsonl"
+
+
+def git(*args: str, env: dict | None = None) -> str | None:
+    r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
+                       env={**os.environ, **(env or {})})
     if r.returncode:
-        print(f"  git {' '.join(args)} feilet: {r.stderr.strip()[:200]}")
-    return r.returncode == 0
+        print(f"  git {' '.join(args[:2])} feilet: {r.stderr.strip()[:200]}")
+        return None
+    return r.stdout.strip()
 
 
 def push(antall: int) -> None:
-    git("add", str(UT.relative_to(ROOT)))
-    if git("commit", "-m", f"data: ollama-tolkninger ({antall} totalt)"):
-        if git("pull", "--rebase", "--autostash") and git("push"):
-            print(f"  ↑ pushet ({antall} tolkninger)")
+    """Legger jsonl-filen i en commit på grenen «ollama-tolkninger» og pusher
+    den — uten å røre arbeidsmappen, gjeldende gren eller databasen. Bare denne
+    PC-en skriver til grenen, så det blir aldri konflikter."""
+    blob = git("hash-object", "-w", str(UT))
+    if not blob:
+        return
+    indeks = str(ROOT / ".git" / "ollama-index")
+    env = {"GIT_INDEX_FILE": indeks}
+    if git("read-tree", "--empty", env=env) is None:
+        return
+    if git("update-index", "--add", "--cacheinfo", f"100644,{blob},{FIL_I_GREN}", env=env) is None:
+        return
+    tre = git("write-tree", env=env)
+    git("fetch", "-q", "origin", f"+refs/heads/{GREN}:refs/remotes/origin/{GREN}")  # finnes kanskje ikke ennå
+    forelder = subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/remotes/origin/{GREN}"],
+                              cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    args = ["commit-tree", tre, "-m", f"data: ollama-tolkninger ({antall} totalt)"] + (["-p", forelder] if forelder else [])
+    commit = git(*args)
+    if commit and git("push", "-q", "origin", f"{commit}:refs/heads/{GREN}") is not None:
+        print(f"  ↑ pushet {antall} tolkninger til grenen {GREN}")
 
 
 def main() -> int:

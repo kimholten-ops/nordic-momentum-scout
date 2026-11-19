@@ -80,6 +80,24 @@ def kjor(fil=FIL) -> dict:
     return stat
 
 
+def hent_fra_gren() -> None:
+    """I GitHub Actions: hent filen fra grenen PC-en pusher til."""
+    import subprocess
+
+    r = subprocess.run(["git", "fetch", "-q", "origin", "+refs/heads/ollama-tolkninger:refs/remotes/origin/ollama-tolkninger"],
+                       cwd=ROOT, capture_output=True, text=True)
+    if r.returncode:
+        print("Grenen ollama-tolkninger finnes ikke (ennå).")
+        return
+    innhold = subprocess.run(["git", "show", "origin/ollama-tolkninger:data/ollama/tolkninger.jsonl"],
+                             cwd=ROOT, capture_output=True, text=True, encoding="utf-8").stdout
+    FIL.parent.mkdir(parents=True, exist_ok=True)
+    FIL.write_text(innhold, encoding="utf-8")
+    print(f"Hentet {len(innhold.splitlines())} tolkninger fra grenen.")
+
+
 if __name__ == "__main__":
+    if "--fra-gren" in sys.argv:
+        hent_fra_gren()
     print(kjor())
     sys.exit(0)

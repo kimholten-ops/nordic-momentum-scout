@@ -68,3 +68,38 @@ def test_import_legger_inn_handler_og_utvider_universet(con, tmp_path, monkeypat
     assert c2.execute("SELECT kilde, antall, beholdning_etter FROM innsidehandler").fetchone()[:] == ("ollama", 1000, 5000)
     assert "nyco,NYCO,A,NYCO.OL,Oslo Børs,1" in csv.read_text(encoding="utf-8")
     assert imp.kjor(fil)["fantes"] == 2   # idempotent
+
+
+def test_push_til_egen_gren_rorer_ikke_arbeidsmappen(tmp_path, monkeypatch):
+    import subprocess
+    from scripts import ollama_tolk
+
+    def g(*a, cwd):
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+    fjern = tmp_path / "fjern.git"
+    g("init", "-q", "--bare", str(fjern), cwd=tmp_path)
+    lokal = tmp_path / "lokal"
+    g("clone", "-q", str(fjern), str(lokal), cwd=tmp_path)
+    for k, v in (("user.name", "t"), ("user.email", "t@t")):
+        g("config", k, v, cwd=lokal)
+    (lokal / "db.sqlite").write_text("gammel")
+    g("add", ".", cwd=lokal)
+    g("commit", "-q", "-m", "start", cwd=lokal)
+    g("push", "-q", "origin", "HEAD", cwd=lokal)
+
+    ut = lokal / "data" / "ollama" / "tolkninger.jsonl"
+    ut.parent.mkdir(parents=True)
+    monkeypatch.setattr(ollama_tolk, "ROOT", lokal)
+    monkeypatch.setattr(ollama_tolk, "UT", ut)
+    ut.write_text('{"url": "u1"}\n', encoding="utf-8")
+    (lokal / "db.sqlite").write_text("endret lokalt")       # skal ikke pushes eller røres
+    ollama_tolk.push(1)
+    ut.write_text('{"url": "u1"}\n{"url": "u2"}\n', encoding="utf-8")
+    ollama_tolk.push(2)
+
+    assert g("show", "ollama-tolkninger:data/ollama/tolkninger.jsonl", cwd=fjern).count("url") == 2
+    assert g("rev-list", "--count", "ollama-tolkninger", cwd=fjern) == "2"           # to commits, lineær
+    assert g("ls-tree", "-r", "--name-only", "ollama-tolkninger", cwd=fjern) == "data/ollama/tolkninger.jsonl"
+    assert (lokal / "db.sqlite").read_text() == "endret lokalt"
+    assert "M db.sqlite" in g("status", "--porcelain", cwd=lokal)                     # arbeidsmappen urørt

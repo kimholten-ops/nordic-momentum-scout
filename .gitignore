@@ -5,3 +5,6 @@ data/*.db-wal
 data/*.db-shm
 .venv/
 site/data.json
+
+# Ollama-tolkninger lages lokalt og pushes til grenen ollama-tolkninger
+data/ollama/
