@@ -100,6 +100,8 @@ har data) klassifiserte nyheter — og simulerer handler med det den har lært.
   børsverdi (Yahoo: antall aksjer × kurs). Alt regnes fra det som var kjent
   før publisering; mangler kilden, blir verdien «ukjent». Engangsfylling:
   Actions → «Kontekst arkiv (engangs)». Daglig oppdatering i «Kurser og rapport».
+  Alle vises på kandidatene, men modellen bruker foreløpig bare «emisjon 90 d»
+  (`HJERNE_EGENSKAPER_AV`): de andre ga mer støy enn signal i walk-forward-testen.
 - **Totalavkastning:** utbytte (Yahoo, per eksdato) legges til aksjens
   avkastning. OSEBX er totalavkastningsindeks; de andre børsenes prisindekser
   får et anslått utbyttetillegg (`INDEKS_UTBYTTE_AAR`).
