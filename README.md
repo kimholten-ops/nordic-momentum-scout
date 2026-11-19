@@ -74,8 +74,9 @@ Det reglene ikke klarer, merkes «trenger_llm». Velg selv hvem som tolker reste
 python -m scripts.ollama_tolk          # kan avbrytes og startes igjen
 ```
 Skriptet skriver til `data/ollama/tolkninger.jsonl` og pusher hver 50.
-tolkning; workflowen **Importer Ollama-tolkninger** legger dem inn i
-databasen (som ikke røres lokalt, fordi GitHub-jobbene også endrer den).
+tolkning til grenen `ollama-tolkninger` (uten å røre arbeidsmappen eller
+databasen lokalt). Workflowen **Importer Ollama-tolkninger** henter dem
+derfra annenhver time og legger dem inn i databasen.
 Regn med 5–30 sekunder per melding avhengig av maskinen.
 
 ## Hjernen (src/hjerne/)

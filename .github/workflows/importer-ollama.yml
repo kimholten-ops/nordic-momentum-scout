@@ -1,9 +1,10 @@
 name: Importer Ollama-tolkninger
 
-# Kjøres når PC-en pusher data/ollama/tolkninger.jsonl (scripts/ollama_tolk.py).
+# PC-en (scripts/ollama_tolk.py) pusher tolkninger til grenen
+# «ollama-tolkninger». Denne jobben henter dem derfra annenhver time.
 on:
-  push:
-    paths: ["data/ollama/tolkninger.jsonl"]
+  schedule:
+    - cron: "17 */2 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -28,7 +29,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Importer tolkninger
-        run: python -m scripts.importer_tolkninger
+        run: python -m scripts.importer_tolkninger --fra-gren
       - name: Signaler
         run: python -m src.innside_kjor --maks-llm-kall 0
       - name: Kurser for nye selskaper

@@ -35,7 +35,20 @@ if (-not $py) {
 $pyArgs = @(); if ($py.Length -gt 1) { $pyArgs = $py[1..($py.Length - 1)] }
 
 Write-Host "== Oppdaterer repoet" -ForegroundColor Cyan
-git pull --rebase --autostash
+# Denne mappen brukes bare til tolkningen: ta alltid GitHub-versjonen, men ta
+# vare på tolkningene (de ligger i data\ollama og er ikke en del av git).
+$jsonl = "data\ollama\tolkninger.jsonl"
+$backup = Join-Path $env:TEMP "tolkninger-backup.jsonl"
+if (Test-Path $jsonl) { Copy-Item $jsonl $backup -Force }
+if ((Test-Path .git\rebase-merge) -or (Test-Path .git\rebase-apply)) { git rebase --abort 2>$null }
+git fetch -q origin
+$gren = (git symbolic-ref --short refs/remotes/origin/HEAD) -replace "^origin/", ""
+git checkout -q -f $gren 2>$null
+git reset -q --hard "origin/$gren"
+if (Test-Path $backup) {
+    New-Item -ItemType Directory -Force data\ollama | Out-Null
+    if (-not (Test-Path $jsonl) -or (Get-Item $backup).Length -gt (Get-Item $jsonl).Length) { Copy-Item $backup $jsonl -Force }
+}
 
 if (-not (Test-Path .venv\Scripts\python.exe)) {
     Write-Host "== Lager Python-miljø (.venv)" -ForegroundColor Cyan
