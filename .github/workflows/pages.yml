@@ -5,7 +5,7 @@ name: Dashboard (GitHub Pages)
 # "GitHub Actions".
 on:
   workflow_run:
-    workflows: ["Poll nyheter", "Kurser og rapport", "Innside backfill og backtest", "Innside arkiv (MFN, uten KI)", "Importer Ollama-tolkninger"]
+    workflows: ["Poll nyheter", "Kurser og rapport", "Innside backfill og backtest", "Innside arkiv (MFN, uten KI)", "Importer Ollama-tolkninger", "Kontekst arkiv (engangs)"]
     types: [completed]
   workflow_dispatch:
 
@@ -33,6 +33,10 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Hent databasen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.db_lagring hent
       - name: Eksporter data
         env:
           WEBPUSH_VAPID_PUBLIC: ${{ vars.WEBPUSH_VAPID_PUBLIC }}

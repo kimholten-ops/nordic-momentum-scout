@@ -64,6 +64,9 @@ if (-not (Test-Path .venv\Scripts\python.exe)) {
 Write-Host ("== Bruker " + (& .\.venv\Scripts\python.exe --version)) -ForegroundColor Cyan
 # Tolkningen trenger bare requests + tidssonedata (Windows har ikke tidssonedatabasen innebygd).
 .\.venv\Scripts\python.exe -m pip install -q --disable-pip-version-check requests tzdata
+# Databasen ligger som vedlegg på GitHub-releasen «data-siste» (ikke i git).
+.\.venv\Scripts\python.exe -m scripts.db_lagring hent
+if ($LASTEXITCODE -ne 0) { throw "Klarte ikke å hente databasen fra GitHub." }
 
 Write-Host "== Sjekker Ollama" -ForegroundColor Cyan
 try { Invoke-RestMethod http://localhost:11434/api/tags -TimeoutSec 5 | Out-Null }

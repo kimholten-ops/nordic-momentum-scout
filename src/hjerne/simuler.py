@@ -30,6 +30,7 @@ from src.config import (
     HJERNE_MIN_SIKKERHET,
     HJERNE_PRIOR_STYRKE,
     HJERNE_STOPP_ATR,
+    HJERNE_UTELAT,
 )
 from src.hjerne.hendelser import Hendelse
 from src.hjerne.modell import Modell, Observasjon, tren
@@ -54,6 +55,11 @@ class Param:
     risiko: float = HJERNE_RISIKO
     likviditet_tak: float = HJERNE_LIKVIDITET_TAK
     min_posisjon: float = HJERNE_MIN_POSISJON
+    utelat: list[tuple[str, str]] = field(default_factory=lambda: list(HJERNE_UTELAT))
+
+    def utelatt(self, egenskaper: dict[str, str]) -> str | None:
+        """Første harde filter hendelsen treffer (f.eks. «kurs.likviditet=lav»), ellers None."""
+        return next((f"{f}={v}" for f, v in self.utelat if egenskaper.get(f) == v), None)
 
     def storrelse(self, stopp_andel: float, omsetning_nok: float | None, kapital: float | None = None) -> float:
         """Beløp i kroner for én posisjon (se config for reglene)."""
@@ -118,7 +124,9 @@ def _indeksavkastning(kurser, yahoo: str, fra: str, til: str) -> float | None:
     if a < 0 or b < a or not idx.close[b]:
         return None
     start = idx.open[a] if idx.datoer[a] == fra and idx.open[a] else idx.close[a]
-    return idx.close[b] / start - 1 if start else None
+    s = kurser.get(yahoo)
+    dager = (s.indeks_til_og_med(til) - s.indeks_til_og_med(fra)) if s else 0
+    return idx.close[b] / start - 1 + marked.indeks_utbytte(yahoo, dager) if start else None
 
 
 def _legg_til_handelsdager(fra: date, n: int) -> date:
@@ -201,8 +209,9 @@ def kjor(hendelser: list[Hendelse], kurser: dict[str, marked.Serie], p: Param | 
                     "utfall": utfall_for.get(h.nokkel), "trent_n": m.n, "bidrag": bidrag[:4],
                     "beskrivelse": h.beskrivelse,
                 }
+                rad["filter"] = p.utelatt(h.egenskaper)
                 res.prediksjoner.append(rad)
-                if pred >= p.min_edge and sikk >= p.min_sikkerhet:
+                if pred >= p.min_edge and sikk >= p.min_sikkerhet and not rad["filter"]:
                     vurdert.append((pred, h, i, rad))
             vurdert.sort(key=lambda x: -x[0])
             for pred, h, i, rad in vurdert:
@@ -262,7 +271,8 @@ def kjor(hendelser: list[Hendelse], kurser: dict[str, marked.Serie], p: Param | 
         sist = s.close[-1]
         if not sist:
             continue
-        aksepter = (pred >= p.min_edge and sikk >= p.min_sikkerhet and ledig > 0
+        filt = p.utelatt(h.egenskaper)
+        aksepter = (pred >= p.min_edge and sikk >= p.min_sikkerhet and ledig > 0 and not filt
                     and not any(t.slug == h.slug for t in apne))
         limit = sist * (1 + LIMIT_PAASLAG)
         sa = stopp_andel(s, len(s.datoer), p.stopp_atr)
@@ -273,7 +283,7 @@ def kjor(hendelser: list[Hendelse], kurser: dict[str, marked.Serie], p: Param | 
             "publisert": h.publisert, "pred": pred, "sikkerhet": sikk, "bidrag": bidrag[:4],
             "siste_kurs": sist, "limit": limit, "stopp": limit * (1 - sa), "belop": belop,
             "inn_dato": inn_dag.isoformat(), "ut_dato": _legg_til_handelsdager(inn_dag, p.horisont).isoformat(),
-            "beskrivelse": h.beskrivelse, "anbefalt": int(aksepter),
+            "beskrivelse": h.beskrivelse, "anbefalt": int(aksepter), "filter": filt,
         })
         if aksepter:
             ledig -= 1
@@ -286,7 +296,7 @@ def _lukk(t: Trade, dag: str, pris: float | None, status: str, kurser, p: Param)
     s = kurser[t.yahoo]
     i = s.indeks_til_og_med(t.inn_dato)
     t.ut_dato, t.ut, t.status = dag, pris, status
-    t.raa = pris / t.inn - 1
+    t.raa = (pris + s.utbytte_mellom(i, s.indeks_til_og_med(dag))) / t.inn - 1
     t.marked = _indeksavkastning(kurser, t.yahoo, t.inn_dato, dag)
     t.kost = marked.kostnad(marked.til_nok(marked.omsetning_nok(s, i), t.yahoo), t.belop)
     t.netto = t.raa - t.kost
@@ -297,7 +307,10 @@ def _urealisert(t: Trade, kurser, dag: str, p: Param) -> float:
     s = kurser[t.yahoo]
     j = s.indeks_til_og_med(dag)
     c = s.close[j] if j >= 0 else None
-    return t.belop * (c / t.inn - 1) if c else 0.0
+    if not c:
+        return 0.0
+    i = s.indeks_til_og_med(t.inn_dato)
+    return t.belop * ((c + s.utbytte_mellom(i, j)) / t.inn - 1)
 
 
 MIN_TRENT = 30

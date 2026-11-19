@@ -1,0 +1,50 @@
+name: Kontekst arkiv (engangs)
+
+# Manuell jobb (Actions -> Run workflow). Fyller kontekstdataene til hjernen
+# bakover: rapporter, tilbakekjøp og emisjoner fra MFN, shortregisteret,
+# sektor og antall aksjer fra Yahoo for alle selskaper, og hele
+# kurshistorikken på nytt med utbytte. Etterpå trenes hjernen på nytt.
+# Daglig oppdatering skjer i «Kurser og rapport».
+on:
+  workflow_dispatch:
+    inputs:
+      fra:
+        description: "Eldste dato for MFN-kontekst (YYYY-MM-DD)"
+        default: "2022-06-01"
+      kurser:
+        description: "Hent kurshistorikk på nytt (med utbytte)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: momentum-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  kontekst:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Hent databasen
+        run: python -m scripts.db_lagring hent
+      - name: Kontekst (MFN, short, Yahoo-info for alle)
+        run: python -m src.kontekst_kjor --mfn-fra "${{ inputs.fra }}" --info-maks 0
+      - name: Kurshistorikk med utbytte
+        if: inputs.kurser
+        run: python -m scripts.hent_kurshistorikk --dager 1600
+      - name: Hjerne (walk-forward, uten varsel)
+        run: python -m src.hjerne_kjor --ikke-varsle
+      - name: Lagre databasen (release «data-siste»)
+        run: python -m scripts.db_lagring last-opp

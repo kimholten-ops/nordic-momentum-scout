@@ -100,6 +100,11 @@ INNSIDE_VARSLE = env("INNSIDE_VARSLE", "0") == "1"
 # --- Markedsindekser (meravkastning) -----------------------------------------
 # Børssuffiks -> Yahoo-indeks. Brukes til å trekke markedet fra avkastningen.
 INDEKSER = {".OL": "OSEBX.OL", ".ST": "^OMXSPI", ".HE": "^OMXH25", ".CO": "^OMXC25"}
+# OSEBX er en totalavkastningsindeks (utbytte reinvestert); de andre er
+# prisindekser. Aksjene får utbytte lagt til (kurser.utbytte), så
+# prisindeksene får et anslått årlig direkteavkastningstillegg for at
+# meravkastningen skal sammenligne likt med likt.
+INDEKS_UTBYTTE_AAR = {".OL": 0.0, ".ST": 0.03, ".HE": 0.04, ".CO": 0.02}
 KURSHISTORIKK_DAGER = int(env("KURSHISTORIKK_DAGER", "1600"))  # fra ca. 2022: arkivet + 52 ukers bakblikk
 
 # --- Handelskostnader (backtest og papirhandel) -------------------------------
@@ -114,7 +119,10 @@ SLIPPAGE_ETTER_OMSETNING = [(50_000_000, 0.001), (5_000_000, 0.004), (0, 0.01)]
 HJERNE_HORISONT = int(env("HJERNE_HORISONT", "5"))          # handelsdager i en trade (kort sikt)
 HJERNE_HORISONT_LANG = int(env("HJERNE_HORISONT_LANG", "20"))  # lang sikt på kandidatsiden
 HJERNE_HALVERINGSTID = float(env("HJERNE_HALVERINGSTID", "180"))  # dager: nyere utfall veier mer
-HJERNE_PRIOR_STYRKE = float(env("HJERNE_PRIOR_STYRKE", "15"))  # krymping mot 0 (antall "late" observasjoner)
+# Krymping mot 0 (antall "late" observasjoner per verdi). Analysen nov. 2026:
+# 50 halverte antall handler og snudde netto per handel fra ~0 til positiv;
+# 15 lot hjernen tro for mye på små grupper.
+HJERNE_PRIOR_STYRKE = float(env("HJERNE_PRIOR_STYRKE", "50"))
 HJERNE_MIN_EDGE = float(env("HJERNE_MIN_EDGE", "0.005"))    # forventet netto meravkastning for å handle
 HJERNE_MIN_SIKKERHET = float(env("HJERNE_MIN_SIKKERHET", "0.6"))  # P(netto meravkastning > 0)
 HJERNE_MAKS_APNE = int(env("HJERNE_MAKS_APNE", "6"))
@@ -131,6 +139,21 @@ HJERNE_LIKVIDITET_TAK = float(env("HJERNE_LIKVIDITET_TAK", "0.05"))
 HJERNE_MIN_POSISJON = float(env("HJERNE_MIN_POSISJON", "3000"))
 HJERNE_STOPP_ATR = float(env("HJERNE_STOPP_ATR", "2.0"))    # stopp = inngang - k x ATR20
 HJERNE_VARSLE = env("HJERNE_VARSLE", "1") == "1"
+
+# Harde filtre: hendelser med disse egenskapene papirhandles og anbefales
+# aldri, uansett hva modellen tror. Begge var klart negative både i 2023–24
+# og i 2025–26 (illikvid = kostnaden spiser alt; ukjent innsiderkurs = ofte
+# tildeling/opsjon/feil som slapp gjennom).
+HJERNE_UTELAT = [("kurs.likviditet", "lav"), ("innside.kurs_vs_innsider", "ukjent")]
+
+# Regelsjekk (enkel, gjennomsiktig strategi ved siden av modellen): likvid,
+# ingen advarsel og minst ett plusstegn. Lister fra analysen av 2023–24,
+# testet på 2025–26 (20 d: +2,0 % over markedet, +1,0 % netto, n=64).
+REGEL_LIKVID = ["høy", "middels"]
+REGEL_ADVARSEL = [("kurs.reaksjon", "rolig"), ("kurs.volum", "normalt"), ("kurs.marked", "HE")]
+REGEL_PLUSS = [("innside.verdi", ">1M"), ("kurs.marked", "CO"),
+               ("innside.kurs_vs_innsider", "rundt innsiders kurs"),
+               ("innside.kurs_vs_innsider", "under innsiders kurs"), ("kurs.reaksjon", "etter børstid")]
 
 # --- Børstid --------------------------------------------------------------
 MARKET_OPEN = (9, 0)

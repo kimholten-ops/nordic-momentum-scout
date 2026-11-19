@@ -217,6 +217,9 @@ const EGENSKAP_NAVN = {
   "kurs.volum": "Volum meldingsdagen", "kurs.regime": "Markedet",
   "innside.mønster": "Kjøpsmønster", "innside.historikk": "Personens historikk",
   "innside.kurs_vs_innsider": "Kurs mot innsiders pris", "innside.flyt90": "Innsideflyt 90 d",
+  "kurs.volatilitet": "Volatilitet", "kurs.relstyrke20": "Mot børsen 20 d", "kurs.størrelse": "Børsverdi",
+  "kurs.short": "Short", "selskap.sektor": "Sektor", "kontekst.rapport": "Rapportvindu",
+  "kontekst.tilbakekjøp90": "Tilbakekjøp 90 d", "kontekst.emisjon90": "Emisjon 90 d",
   "nyhet.kategori": "Kategori", "nyhet.retning": "Retning", "nyhet.overraskelse": "Overraskelse", "kilde": "Kilde",
 };
 const MERK = {"kjøp": ["Kjøp", "m-kjøp"], "følg med": ["Følg med", "m-følg"], "nøytral": ["Nøytral", "m-nøytral"], "unngå": ["Unngå", "m-unngå"]};
@@ -269,6 +272,7 @@ function kandidatKort(c) {
   const stoppPst = c.stopp / c.limit - 1;
   const parametre = Object.entries(c.egenskaper).filter(([f]) => f !== "kurs.marked")
     .map(([f, v]) => el("span", {class: "param"}, (EGENSKAP_NAVN[f] || f) + ": ", el("b", {text: v})));
+  const filterTekst = c.filter ? (() => { const [f, v] = c.filter.split("="); return `${EGENSKAP_NAVN[f] || f}: ${v}`; })() : null;
   if (c.regelscore != null) parametre.push(el("span", {class: "param"}, "Regelscore: ", el("b", {text: fmt(c.regelscore, 1)})));
   if (c.hendelser_i_perioden > 1) parametre.push(el("span", {class: "param"}, "Hendelser 10 d: ", el("b", {text: String(c.hendelser_i_perioden)})));
   return el("article", {class: "kand" + (c.status === "sen" ? " sen" : "")},
@@ -277,6 +281,8 @@ function kandidatKort(c) {
         el("div", {class: "navn", text: `${c.rang}. ${c.navn}`}),
         el("div", {class: "tick", text: `${c.ticker} · ${c.bors} · ${c.kilde === "innside" ? "innsidekjøp" : "nyhet"}`}),
         el("span", {class: "merk " + merkKl, text: merkTekst}),
+        c.regelsjekk && c.regelsjekk.ok ? el("span", {class: "merk m-kjøp", title: "Enkel regelstrategi: likvid, ingen advarsel, minst ett plusstegn (" + c.regelsjekk.pluss.join(", ") + ")", text: "✓ Regelsjekk"}) : null,
+        filterTekst ? el("span", {class: "merk m-unngå", title: "Hardt filter: papirhandles og anbefales aldri", text: "Filtrert bort · " + filterTekst}) : null,
         el("div", {class: "stat", text: statusTekst(c)}))),
     horisontBoks("Kort sikt", c.kort, c.posisjon),
     horisontBoks("Lang sikt", c.lang, c.posisjon),

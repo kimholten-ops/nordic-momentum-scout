@@ -40,6 +40,38 @@ CREATE TABLE IF NOT EXISTS kurser (
     PRIMARY KEY (yahoo, dato)
 ) WITHOUT ROWID;   -- nøkkelen ER tabellen: sparer en tredjedel plass
 
+-- Kontekst fra MFN (uten tekst): rapporter, tilbakekjøp og emisjoner per
+-- selskap. Én rad per meldingsgruppe (språkversjoner deler group_id).
+CREATE TABLE IF NOT EXISTS selskapshendelser (
+    group_id  TEXT PRIMARY KEY,
+    slug      TEXT NOT NULL,
+    type      TEXT NOT NULL,      -- rapport | tilbakekjop | emisjon
+    publisert TEXT NOT NULL       -- norsk lokal tid
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_selskapshendelser_slug ON selskapshendelser(slug, type, publisert);
+
+-- ISIN per selskap (fra MFN), for å koble mot shortregisteret.
+CREATE TABLE IF NOT EXISTS selskap_isin (slug TEXT NOT NULL, isin TEXT NOT NULL, PRIMARY KEY (slug, isin)) WITHOUT ROWID;
+
+-- Sektor og antall aksjer fra Yahoo (oppdateres månedlig). Børsverdi på en
+-- dato = aksjer x sluttkurs (antall aksjer endrer seg sjelden mye).
+CREATE TABLE IF NOT EXISTS selskapsinfo (
+    yahoo     TEXT PRIMARY KEY,
+    sektor    TEXT,
+    bransje   TEXT,
+    aksjer    REAL,
+    oppdatert TEXT
+);
+
+-- Netto shortandel (% av aksjene) per ISIN og dato, fra Finanstilsynets
+-- shortregister (Oslo). Bare endringsdager; verdien gjelder til neste rad.
+CREATE TABLE IF NOT EXISTS short (
+    isin      TEXT NOT NULL,
+    dato      TEXT NOT NULL,
+    prosent   REAL NOT NULL,
+    PRIMARY KEY (isin, dato)
+) WITHOUT ROWID;
+
 -- Selskapsregister, speiler universe/tickers.csv.
 CREATE TABLE IF NOT EXISTS selskaper (
     slug      TEXT PRIMARY KEY,
@@ -215,7 +247,8 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 
 # Kolonner lagt til etter at tabellen fantes. CREATE TABLE IF NOT EXISTS
 # endrer ikke eksisterende tabeller, så de legges til her.
-MIGRERINGER = [("innsidehandler", "beholdning_etter", "REAL"), ("hjerne_trades", "belop", "REAL")]
+MIGRERINGER = [("innsidehandler", "beholdning_etter", "REAL"), ("hjerne_trades", "belop", "REAL"),
+               ("kurser", "utbytte", "REAL")]
 
 
 def _migrer(con: sqlite3.Connection) -> None:
