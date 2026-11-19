@@ -298,3 +298,17 @@ def test_telegram_faller_tilbake_til_ren_tekst(monkeypatch):
     monkeypatch.setattr(notify.requests, "post", post)
     assert notify.send("<b>Feil:</b> a < b")
     assert kall[-1]["text"] == "Feil: a < b" and "parse_mode" not in kall[-1]
+
+
+@pytest.mark.parametrize("inn,ut", [
+    ("https://kimholten-ops.github.io/nordic-momentum-scout/", "https://kimholten-ops.github.io"),
+    (" mailto:kim@example.no ", "mailto:kim@example.no"),
+    ("kim@example.no", "mailto:kim@example.no"),
+    ("", "mailto:momentum@example.invalid"),
+    ("tull", "mailto:momentum@example.invalid"),
+])
+def test_vapid_kontakt_blir_gyldig_sub(inn, ut):
+    import py_vapid
+    from src.notify import vapid_kontakt
+    assert vapid_kontakt(inn) == ut
+    assert py_vapid._check_sub(vapid_kontakt(inn))
