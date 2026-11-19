@@ -5,7 +5,7 @@ name: Dashboard (GitHub Pages)
 # "GitHub Actions".
 on:
   workflow_run:
-    workflows: ["Poll nyheter", "Kurser og rapport", "Innside backfill og backtest"]
+    workflows: ["Poll nyheter", "Kurser og rapport", "Innside backfill og backtest", "Innside arkiv (MFN, uten KI)"]
     types: [completed]
   workflow_dispatch:
 

@@ -81,7 +81,14 @@ def test_ingen_lekkasje_trening_bare_paa_kjente_utfall():
             1 for h in hendelser
             if (u := marked.utfall(kurser, h.yahoo, h.publisert, p.horisont)) and u.ut_dato < r["inn_dato"]
         )
-        assert r["trent_n"] == kjente
+        # Aldri mer enn det som var kjent; høyst en uke gammel trening.
+        assert r["trent_n"] <= kjente
+        uke_for = (date.fromisoformat(r["inn_dato"]) - timedelta(days=simuler.RETREN_DAGER)).isoformat()
+        kjent_uke_for = sum(
+            1 for h in hendelser
+            if (u := marked.utfall(kurser, h.yahoo, h.publisert, p.horisont)) and u.ut_dato < uke_for
+        )
+        assert r["trent_n"] >= kjent_uke_for
     # første hendelse har ingenting å lære av
     assert res.prediksjoner[0]["trent_n"] == 0 and res.prediksjoner[0]["valgt"] == 0
 
@@ -192,3 +199,26 @@ def test_kursrader_uten_sluttkurs_ignoreres_og_overskriver_ikke(tmp_path, monkey
     con.execute("INSERT INTO kurser VALUES ('Y.OL','2026-11-17',5,5,5,5,1)")
     k = marked.last_kurser(con)
     assert k["Y.OL"].datoer == ["2026-11-17"] and k["Y.OL"].close[-1] == 5
+
+
+def test_nye_kursegenskaper_bruker_bare_data_foer_inngang():
+    from src.hjerne.hendelser import kursegenskaper
+
+    dager = _dager(300)
+    close = [100.0] * 299 + [100.0]
+    close[260] = 108.0                       # 52-ukers topp (106 er innen 5 %)
+    aksje = _serie(dager, close)
+    pub = dager[280]
+    aksje.close[280] = 106.0                 # reaksjon +6 % på meldingsdagen
+    aksje.volum[280] = 50_000_000            # 5x normalt
+    idx = _serie(dager, [1000.0 + k for k in range(300)])  # jevnt stigende marked
+    k = {"A.OL": aksje, "OSEBX.OL": idx}
+    eg = kursegenskaper(k, "A.OL", pub + "T10:00:00")
+    assert eg["reaksjon"] == "opp >3%" and eg["volum"] == "høyt (3x+)"
+    assert eg["regime"] == "stigende marked" and eg["uke52"] == "nær toppen" and eg["trend6m"] == "flat"
+    # Samme melding etter stengetid: reaksjonen er ikke kjent før inngangen.
+    eg2 = kursegenskaper(k, "A.OL", pub + "T18:30:00")
+    assert eg2["reaksjon"] == "etter børstid" and eg2["volum"] == "etter børstid"
+    # Fremtidige kurser påvirker ikke egenskapene.
+    aksje.close[290] = 1.0
+    assert kursegenskaper(k, "A.OL", pub + "T10:00:00") == eg
