@@ -17,14 +17,13 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read
 
 jobs:
-  deploy:
+  # Bygg og last opp i én jobb, publiser i en egen (anbefalt av actions/deploy-pages).
+  build:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,8 +38,16 @@ jobs:
           WEBPUSH_VAPID_PUBLIC: ${{ vars.WEBPUSH_VAPID_PUBLIC }}
         run: python -m src.eksport_dashboard
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
