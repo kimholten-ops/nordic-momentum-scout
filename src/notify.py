@@ -31,7 +31,24 @@ from src.config import HTTP_TIMEOUT, TELEGRAM_CHAT_ID, TELEGRAM_TOKEN, env
 
 WEBPUSH_VAPID_PRIVATE = env("WEBPUSH_VAPID_PRIVATE", "")
 WEBPUSH_SUBSCRIPTIONS = env("WEBPUSH_SUBSCRIPTIONS", "")
-WEBPUSH_KONTAKT = env("WEBPUSH_KONTAKT", "mailto:momentum@example.invalid")
+_STANDARD_KONTAKT = "mailto:momentum@example.invalid"
+
+
+def vapid_kontakt(verdi: str | None) -> str:
+    """VAPID-'sub' må være mailto:adresse eller https://vert UTEN sti.
+    Godtar en hel URL (f.eks. dashboard-adressen) og kutter den til verten."""
+    v = (verdi or "").strip()
+    if v.lower().startswith("https://"):
+        vert = v[8:].split("/", 1)[0]
+        return f"https://{vert}" if "." in vert else _STANDARD_KONTAKT
+    if v.lower().startswith("mailto:") and "@" in v:
+        return v
+    if "@" in v and " " not in v:
+        return "mailto:" + v
+    return _STANDARD_KONTAKT
+
+
+WEBPUSH_KONTAKT = vapid_kontakt(env("WEBPUSH_KONTAKT", ""))
 DASHBOARD_URL = env("DASHBOARD_URL", "")
 
 
