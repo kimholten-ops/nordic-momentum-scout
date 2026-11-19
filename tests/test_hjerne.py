@@ -162,3 +162,33 @@ def test_papirhandler_bruker_ledig_kontant():
     for dag, verdi in res.egenkapital:
         apne = [t for t in res.trades if t.inn_dato <= dag and (t.status == "åpen" or t.ut_dato > dag)]
         assert sum(t.belop for t in apne) <= verdi * 1.07  # aldri mer investert enn porteføljen er verdt
+
+
+def test_kursrader_uten_sluttkurs_ignoreres_og_overskriver_ikke(tmp_path, monkeypatch):
+    """Regresjon 19. nov: Yahoo leverte 18. nov uten close; INSERT OR REPLACE
+    slettet gode tall, og hjernen fant 0 kandidater."""
+    import pandas as pd
+    from src import db
+    from src.sources import prices
+
+    p = tmp_path / "k.db"
+    db.init(p)
+    con = db.connect(p)
+    con.execute("INSERT INTO kurser VALUES ('X.OL','2026-11-17',10,11,9,10.5,100)")
+    con.execute("INSERT INTO kurser VALUES ('X.OL','2026-11-18',10.5,11,10,10.8,100)")
+    df = pd.DataFrame({"Open": [10.5, 11.0], "High": [11, 11.5], "Low": [10, 10.9], "Close": [float("nan"), float("nan")],
+                       "Volume": [100, 50]}, index=pd.to_datetime(["2026-11-18", "2026-11-19"]))
+
+    class YF:
+        @staticmethod
+        def download(*a, **k): return df
+    import sys
+    monkeypatch.setitem(sys.modules, "yfinance", YF)
+    prices._last_ned(con, ["X.OL"], "2026-11-10")
+    rader = con.execute("SELECT dato, close FROM kurser WHERE yahoo='X.OL' ORDER BY dato").fetchall()
+    assert [tuple(r) for r in rader] == [("2026-11-17", 10.5), ("2026-11-18", 10.8)]
+
+    con.execute("INSERT INTO kurser VALUES ('Y.OL','2026-11-18',5,5,5,NULL,1)")  # gammel dårlig rad
+    con.execute("INSERT INTO kurser VALUES ('Y.OL','2026-11-17',5,5,5,5,1)")
+    k = marked.last_kurser(con)
+    assert k["Y.OL"].datoer == ["2026-11-17"] and k["Y.OL"].close[-1] == 5

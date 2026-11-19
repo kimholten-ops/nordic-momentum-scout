@@ -38,7 +38,7 @@ def bygg(con) -> dict:
             (EKSTRAKSJON_VERSJON,),
         ).fetchone()[0],
         "selskaper_i_univers": con.execute("SELECT COUNT(*) FROM selskaper WHERE aktiv = 1 AND ticker IS NOT NULL").fetchone()[0],
-        "siste_kurs": con.execute("SELECT MAX(dato) FROM kurser").fetchone()[0],
+        "siste_kurs": con.execute("SELECT MAX(dato) FROM kurser WHERE close IS NOT NULL").fetchone()[0],
     }
     signaler = _rader(
         con,
@@ -103,7 +103,7 @@ def bygg(con) -> dict:
     kurser = {}
     for sym in sorted(x for x in symboler if x):
         rader = con.execute(
-            "SELECT dato, open, high, low, close FROM (SELECT * FROM kurser WHERE yahoo = ? ORDER BY dato DESC LIMIT 120) ORDER BY dato",
+            "SELECT dato, open, high, low, close FROM (SELECT * FROM kurser WHERE yahoo = ? AND close IS NOT NULL ORDER BY dato DESC LIMIT 120) ORDER BY dato",
             (sym,),
         ).fetchall()
         if rader:
