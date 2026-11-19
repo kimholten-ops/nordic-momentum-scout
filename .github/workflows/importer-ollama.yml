@@ -1,0 +1,49 @@
+name: Importer Ollama-tolkninger
+
+# Kjøres når PC-en pusher data/ollama/tolkninger.jsonl (scripts/ollama_tolk.py).
+on:
+  push:
+    paths: ["data/ollama/tolkninger.jsonl"]
+  workflow_dispatch:
+
+concurrency:
+  group: momentum-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  importer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
+      INNSIDE_LLM: "av"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Importer tolkninger
+        run: python -m scripts.importer_tolkninger
+      - name: Signaler
+        run: python -m src.innside_kjor --maks-llm-kall 0
+      - name: Kurser for nye selskaper
+        run: python -m src.fetch_prices
+      - name: Hjerne (uten varsel — dette er historikk)
+        run: python -m src.hjerne_kjor --ikke-varsle
+      - name: Commit
+        run: |
+          git config user.name "momentum-bot"
+          git config user.email "actions@github.com"
+          git add data/momentum.db universe/tickers.csv
+          git diff --staged --quiet && echo "ingen endring" && exit 0
+          git commit -m "data: importerte ollama-tolkninger $(date -u +'%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin ${{ github.ref_name }} && git push && exit 0
+            sleep 5
+          done
+          exit 1

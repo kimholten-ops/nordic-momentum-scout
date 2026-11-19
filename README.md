@@ -69,12 +69,14 @@ Det reglene ikke klarer, merkes «trenger_llm». Velg selv hvem som tolker reste
 (`INNSIDE_LLM`): `anthropic` (Haiku, ca. 2–3 øre per melding), `ollama`
 (lokal modell, gratis) eller `av`.
 
-**Ollama på egen PC:** `ollama pull qwen2.5:7b`, så i repomappen:
+**Ollama på egen PC** (gratis): `ollama pull qwen2.5:7b`, så i repomappen:
 ```powershell
-$env:INNSIDE_LLM="ollama"; python -m src.innside_kjor --maks-llm-kall 10000
-git add data/momentum.db; git commit -m "data: ollama-uttrekk"; git push
+python -m scripts.ollama_tolk          # kan avbrytes og startes igjen
 ```
-Regn med 5–20 sekunder per melding avhengig av maskinen.
+Skriptet skriver til `data/ollama/tolkninger.jsonl` og pusher hver 50.
+tolkning; workflowen **Importer Ollama-tolkninger** legger dem inn i
+databasen (som ikke røres lokalt, fordi GitHub-jobbene også endrer den).
+Regn med 5–30 sekunder per melding avhengig av maskinen.
 
 ## Hjernen (src/hjerne/)
 
