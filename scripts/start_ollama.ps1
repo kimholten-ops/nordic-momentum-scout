@@ -15,7 +15,13 @@ foreach ($k in "git", "ollama") {
 function Finn-Python {
     if (Get-Command py -ErrorAction SilentlyContinue) { return @("py", "-3") }
     $c = Get-Command python -ErrorAction SilentlyContinue
-    if ($c -and $c.Source -notlike "*WindowsApps*") { return @("python") }
+    if ($c -and $c.Source -notlike "*WindowsApps*") { return @($c.Source) }
+    # Installert uten «Add to PATH»: let i standardmappene, nyeste først.
+    $steder = @("$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe", "$env:ProgramFiles\Python3*\python.exe",
+                "C:\Python3*\python.exe")
+    $funnet = Get-ChildItem $steder -ErrorAction SilentlyContinue |
+        Sort-Object { [int]($_.Directory.Name -replace "\D", "") } -Descending | Select-Object -First 1
+    if ($funnet) { return @($funnet.FullName) }
     return $null
 }
 $py = Finn-Python
@@ -37,7 +43,9 @@ if (-not (Test-Path .venv\Scripts\python.exe)) {
     & $py[0] @pyArgs -m venv .venv
     if (-not (Test-Path .venv\Scripts\python.exe)) { throw "Klarte ikke å lage .venv" }
 }
-.\.venv\Scripts\python.exe -m pip install -q --disable-pip-version-check -r requirements.txt
+Write-Host ("== Bruker " + (& .\.venv\Scripts\python.exe --version)) -ForegroundColor Cyan
+# Tolkningen trenger bare requests + tidssonedata (Windows har ikke tidssonedatabasen innebygd).
+.\.venv\Scripts\python.exe -m pip install -q --disable-pip-version-check requests tzdata
 
 Write-Host "== Sjekker Ollama" -ForegroundColor Cyan
 try { Invoke-RestMethod http://localhost:11434/api/tags -TimeoutSec 5 | Out-Null }
