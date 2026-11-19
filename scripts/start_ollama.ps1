@@ -40,11 +40,16 @@ Write-Host "== Oppdaterer repoet" -ForegroundColor Cyan
 $jsonl = "data\ollama\tolkninger.jsonl"
 $backup = Join-Path $env:TEMP "tolkninger-backup.jsonl"
 if (Test-Path $jsonl) { Copy-Item $jsonl $backup -Force }
-if ((Test-Path .git\rebase-merge) -or (Test-Path .git\rebase-apply)) { git rebase --abort 2>$null }
-git fetch -q origin
+# Windows PowerShell gjør git-advarsler på stderr til feil; kjør git tolerant.
+function Git-Stille { $gammel = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    & git @args 2>&1 | Out-Null; $kode = $LASTEXITCODE; $ErrorActionPreference = $gammel; return $kode }
+foreach ($d in ".git\rebase-merge", ".git\rebase-apply") {
+    if (Test-Path $d) { Git-Stille rebase --abort | Out-Null; if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
+}
+if ((Git-Stille fetch -q origin) -ne 0) { throw "git fetch feilet - sjekk nettverket." }
 $gren = (git symbolic-ref --short refs/remotes/origin/HEAD) -replace "^origin/", ""
-git checkout -q -f $gren 2>$null
-git reset -q --hard "origin/$gren"
+Git-Stille checkout -q -f $gren | Out-Null
+if ((Git-Stille reset -q --hard "origin/$gren") -ne 0) { throw "git reset feilet." }
 if (Test-Path $backup) {
     New-Item -ItemType Directory -Force data\ollama | Out-Null
     if (-not (Test-Path $jsonl) -or (Get-Item $backup).Length -gt (Get-Item $jsonl).Length) { Copy-Item $backup $jsonl -Force }
