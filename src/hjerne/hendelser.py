@@ -10,8 +10,9 @@ inngangsdagen.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from src import marked
 
@@ -111,7 +112,24 @@ def kursegenskaper(kurser: dict[str, marked.Serie], yahoo: str, publisert: str) 
     return ut
 
 
-def innsidehendelser(con, kurser: dict[str, marked.Serie]) -> list[Hendelse]:
+def _navn(person: str | None) -> str | None:
+    if not person:
+        return None
+    n = re.sub(r"[^\wæøåäö ]", "", person.lower())
+    return re.sub(r"\s+", " ", n).strip() or None
+
+
+def _boette_kurs_vs_innsider(r: float | None) -> str:
+    if r is None or abs(r) > 0.8:  # over 80 % avvik = trolig feil enhet/valuta
+        return "ukjent"
+    return ("under innsiders kurs" if r < -0.02 else "rundt innsiders kurs" if r <= 0.02 else
+            "over (2–10 %)" if r <= 0.10 else "langt over (>10 %)")
+
+
+def innsidehendelser(con, kurser: dict[str, marked.Serie], horisont: int | None = None) -> list[Hendelse]:
+    from src.config import HJERNE_HORISONT
+
+    horisont = horisont or HJERNE_HORISONT
     rader = con.execute(
         "SELECT h.*, s.yahoo, COALESCE(n.selskap_navn, h.selskap_slug) AS navn "
         "FROM innsidehandler h JOIN selskaper s ON s.slug = h.selskap_slug "
@@ -125,6 +143,32 @@ def innsidehendelser(con, kurser: dict[str, marked.Serie]) -> list[Hendelse]:
         if r["noekkel"] not in sett:
             sett.add(r["noekkel"])
             kjop.append(dict(r))
+
+    # Salg (for netto innsideflyt), dedupliserte på samme måte.
+    salg_per_selskap: dict[str, list[tuple[str, str]]] = {}
+    sett_s: set[str] = set()
+    for r in con.execute(
+        "SELECT selskap_slug, publisert, person, nyhet_id, noekkel FROM innsidehandler "
+        "WHERE gyldig = 1 AND retning = 'salg' AND instrument = 'aksje' ORDER BY publisert"
+    ):
+        if r["noekkel"] in sett_s:
+            continue
+        sett_s.add(r["noekkel"])
+        salg_per_selskap.setdefault(r["selskap_slug"], []).append(
+            (r["publisert"][:10], _navn(r["person"]) or f"?{r['nyhet_id']}"))
+
+    data_start = min((k["publisert"][:10] for k in kjop), default="2000-01-01")
+    ett_aar_inn = (date.fromisoformat(data_start) + timedelta(days=365)).isoformat()
+
+    # Personens tidligere kjøp: (publiseringsdag, utgangsdag, netto meravkastning).
+    tidligere: dict[tuple[str, str], list[tuple[str, str | None, float | None]]] = {}
+    for k in kjop:
+        navn = _navn(k["person"])
+        if not navn:
+            continue
+        u = marked.utfall(kurser, k["yahoo"], k["publisert"], horisont)
+        tidligere.setdefault((k["selskap_slug"], navn), []).append(
+            (k["publisert"][:10], u.ut_dato if u else None, u.netto_mer if u else None))
 
     dager: dict[tuple[str, str], list[dict]] = {}
     for k in kjop:
@@ -151,6 +195,55 @@ def innsidehendelser(con, kurser: dict[str, marked.Serie]) -> list[Hendelse]:
             "innside.verdi": _boette_verdi(verdi),
             "innside.andel": _boette_andel(min(andel, 1.0) if andel is not None else None),
         }
+
+        # 1) Rutine: samme person kjøpte i samme kalendermåned et tidligere år.
+        # 2) Historikk: hvordan gikk personens tidligere kjøp (kun utfall kjent før i dag)?
+        navn_i_dag = {n for n in (_navn(k["person"]) for k in ks) if n}
+        rutine = tidl_kjent = False
+        tidl_utfall: list[float] = []
+        for navn in navn_i_dag:
+            for p_dag, ut_dag, mer in tidligere.get((slug, navn), []):
+                if p_dag >= dag:
+                    continue
+                tidl_kjent = True
+                if p_dag[5:7] == dag[5:7] and p_dag[:4] < dag[:4]:
+                    rutine = True
+                if ut_dag and ut_dag < dag and mer is not None:
+                    tidl_utfall.append(mer)
+        if not navn_i_dag:
+            eg["innside.mønster"] = "ukjent person"
+        elif rutine:
+            eg["innside.mønster"] = "rutine (samme måned før)"
+        elif dag < ett_aar_inn:
+            eg["innside.mønster"] = "ukjent (kort historikk)"
+        else:
+            eg["innside.mønster"] = "gjentatt kjøp" if tidl_kjent else "første kjøp på 1+ år"
+        if not tidl_utfall:
+            eg["innside.historikk"] = "ingen kjente tidligere"
+        else:
+            snitt = sum(tidl_utfall) / len(tidl_utfall)
+            eg["innside.historikk"] = "tidligere kjøp gikk bra" if snitt > 0 else "tidligere kjøp gikk dårlig"
+
+        # 3) Kurs ved inngang mot prisen innsideren betalte (vektet snitt).
+        s = kurser.get(yahoo)
+        betalt = [(k["antall"], k["pris"]) for k in ks if k["antall"] and k["pris"]]
+        r = None
+        if s and betalt:
+            vwap = sum(a * p for a, p in betalt) / sum(a for a, _ in betalt)
+            i = s.indeks_etter(siste[:10])
+            if i >= 1 and s.close[i - 1] and vwap:
+                r = s.close[i - 1] / vwap - 1
+        eg["innside.kurs_vs_innsider"] = _boette_kurs_vs_innsider(r)
+
+        # 4) Netto innsideflyt siste 90 dager: ulike kjøpere mot ulike selgere.
+        fra90 = (date.fromisoformat(dag) - timedelta(days=90)).isoformat()
+        kjopere90 = {_navn(k["person"]) or f"?{k['nyhet_id']}" for k in kjop
+                     if k["selskap_slug"] == slug and fra90 <= k["publisert"][:10] <= dag}
+        selgere90 = {n for d, n in salg_per_selskap.get(slug, []) if fra90 <= d <= dag}
+        eg["innside.flyt90"] = ("ingen salg" if not selgere90 else
+                                "flere kjøpere enn selgere" if len(kjopere90) > len(selgere90) else
+                                "like mange eller flere selgere")
+
         eg.update({f"kurs.{k}": v for k, v in kursegenskaper(kurser, yahoo, siste).items()})
         personer = ", ".join(sorted({f"{k['person'] or '?'} ({k['rolle_tekst'] or k['rolle']})" for k in ks}))[:200]
         ut.append(Hendelse(

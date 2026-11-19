@@ -222,3 +222,41 @@ def test_nye_kursegenskaper_bruker_bare_data_foer_inngang():
     # Fremtidige kurser påvirker ikke egenskapene.
     aksje.close[290] = 1.0
     assert kursegenskaper(k, "A.OL", pub + "T10:00:00") == eg
+
+
+def test_innsideparametere_rutine_historikk_kurs_og_flyt(tmp_path):
+    """Rutine (samme måned tidligere år), personens historikk (kun kjente
+    utfall), kurs mot innsiders pris og netto innsideflyt siste 90 dager."""
+    from src import db
+    from src.hjerne.hendelser import innsidehendelser
+
+    p = tmp_path / "t.db"
+    db.init(p)
+    con = db.connect(p)
+    con.execute("INSERT INTO selskaper (slug, navn, ticker, yahoo, marked, aktiv) VALUES ('abc','ABC','ABC','ABC.OL','Oslo',1)")
+    dager = _dager(520, start=date(2024, 1, 1))
+    serie = _serie(dager, [100.0] * len(dager))
+    kurser = {"ABC.OL": serie, "OSEBX.OL": _serie(dager, [1000.0] * len(dager))}
+
+    def handel(nid, dag, person, retning="kjop", pris=100.0):
+        con.execute("INSERT INTO nyheter (id, url, publisert, hentet, selskap_slug, selskap_navn, tittel) "
+                    "VALUES (?,?,?,?,?,?,?)", (nid, f"u{nid}", dag + "T10:00:00", "nå", "abc", "ABC", "Mandatory notification"))
+        con.execute("INSERT INTO innsidehandler (nyhet_id, linje, versjon, kilde, selskap_slug, publisert, rolle, retning, "
+                    "instrument, antall, pris, valuta, verdi, person, noekkel) VALUES (?,0,'e2','regel','abc',?,?,?,?,?,?,?,?,?,?)",
+                    (nid, dag + "T10:00:00", "ceo", retning, "aksje", 1000, pris, "NOK", 1000 * pris, person,
+                     f"{nid}|{person}|{retning}"))
+
+    handel(1, "2024-03-05", "Kari Nordmann")                    # første kjøp
+    handel(2, "2025-03-12", "Kari Nordmann")                    # samme måned året etter = rutine
+    handel(3, "2025-03-01", "Per Selger", retning="salg")       # én selger
+    handel(4, "2025-06-02", "Ola Ny", pris=80.0)                # kurs 100 er 25 % over innsiders pris
+    con.commit()
+    hs = {h.publisert[:10]: h.egenskaper for h in innsidehendelser(con, kurser, horisont=5)}
+    assert hs["2024-03-05"]["innside.mønster"] == "ukjent (kort historikk)"
+    assert hs["2025-03-12"]["innside.mønster"] == "rutine (samme måned før)"
+    assert hs["2025-03-12"]["innside.historikk"] == "tidligere kjøp gikk dårlig"   # flat kurs - kostnad < 0
+    assert hs["2025-03-12"]["innside.flyt90"] == "like mange eller flere selgere"   # 1 kjøper, 1 selger
+    assert hs["2025-03-12"]["innside.kurs_vs_innsider"] == "rundt innsiders kurs"
+    assert hs["2025-06-02"]["innside.kurs_vs_innsider"] == "langt over (>10 %)"
+    assert hs["2025-06-02"]["innside.mønster"] == "første kjøp på 1+ år"
+    assert hs["2025-06-02"]["innside.historikk"] == "ingen kjente tidligere"
