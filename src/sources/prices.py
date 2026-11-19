@@ -52,11 +52,18 @@ def _last_ned(con: sqlite3.Connection, symboler: list[str], start: str) -> int:
                 sub = sub.droplevel(0, axis=1) if sym in sub.columns.get_level_values(0) else sub
             sub = sub.dropna(how="all")
             for idx, rad in sub.iterrows():
-                if rad.isna().all():
+                # Yahoo leverer av og til en dag uten sluttkurs (ufullstendig
+                # bar, eller feil). Den hoppes over: en rad uten close er
+                # verdiløs for oss og ville ellers skjule en god rad.
+                if _f(rad.get("Close")) is None:
                     continue
+                # Upsert som aldri overskriver en kjent verdi med NULL.
                 con.execute(
-                    "INSERT OR REPLACE INTO kurser "
-                    "(yahoo, dato, open, high, low, close, volum) VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO kurser (yahoo, dato, open, high, low, close, volum) VALUES (?,?,?,?,?,?,?) "
+                    "ON CONFLICT(yahoo, dato) DO UPDATE SET "
+                    " open = COALESCE(excluded.open, kurser.open), high = COALESCE(excluded.high, kurser.high), "
+                    " low = COALESCE(excluded.low, kurser.low), close = COALESCE(excluded.close, kurser.close), "
+                    " volum = COALESCE(excluded.volum, kurser.volum)",
                     (
                         sym,
                         idx.date().isoformat(),

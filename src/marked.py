@@ -48,7 +48,11 @@ class Serie:
 
 def last_kurser(con) -> dict[str, Serie]:
     ut: dict[str, Serie] = {}
-    for r in con.execute("SELECT yahoo, dato, open, high, low, close, volum FROM kurser ORDER BY yahoo, dato"):
+    # Rader uten sluttkurs (Yahoo-hull) tas ikke med: de ville gjort "siste
+    # kurs" ukjent og stoppet både kandidater og papirhandler.
+    for r in con.execute(
+        "SELECT yahoo, dato, open, high, low, close, volum FROM kurser WHERE close IS NOT NULL ORDER BY yahoo, dato"
+    ):
         s = ut.get(r["yahoo"])
         if s is None:
             s = ut[r["yahoo"]] = Serie([], [], [], [], [], [])
