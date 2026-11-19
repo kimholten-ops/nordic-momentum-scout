@@ -129,3 +129,13 @@ def test_db_lagring_stopper_hvis_release_finnes_men_nedlasting_feiler(tmp_path, 
         raise requests.ConnectionError("nett nede")
     monkeypatch.setattr(requests, "get", feil)
     assert db_lagring.hent(tmp_path / "m.db") == 1
+
+
+def test_avslaatte_egenskaper_brukes_ikke_av_modellen():
+    from src.hjerne.hendelser import Hendelse
+    from src.hjerne.simuler import _egenskaper
+
+    h = Hendelse("n", "innside", "a", "A", "A.OL", "2025-01-01T10:00:00",
+                 {"kontekst.emisjon90": "ja", "selskap.sektor": "energi", "kurs.likviditet": "høy"})
+    eg = _egenskaper(h)
+    assert eg["kontekst.emisjon90"] == "ja" and "selskap.sektor" not in eg and eg["kurs.likviditet"] == "høy"

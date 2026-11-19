@@ -30,6 +30,7 @@ from src.config import (
     HJERNE_MIN_SIKKERHET,
     HJERNE_PRIOR_STYRKE,
     HJERNE_STOPP_ATR,
+    HJERNE_EGENSKAPER_AV,
     HJERNE_UTELAT,
 )
 from src.hjerne.hendelser import Hendelse
@@ -113,7 +114,8 @@ def stopp_andel(serie: marked.Serie, i: int, k: float) -> float:
 
 
 def _egenskaper(h: Hendelse) -> dict[str, str]:
-    return {"kilde": h.kilde, **h.egenskaper}
+    """Egenskapene modellen bruker (se HJERNE_EGENSKAPER_AV for dem som bare vises)."""
+    return {"kilde": h.kilde, **{f: v for f, v in h.egenskaper.items() if f not in HJERNE_EGENSKAPER_AV}}
 
 
 def _indeksavkastning(kurser, yahoo: str, fra: str, til: str) -> float | None:

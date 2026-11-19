@@ -146,6 +146,17 @@ HJERNE_VARSLE = env("HJERNE_VARSLE", "1") == "1"
 # tildeling/opsjon/feil som slapp gjennom).
 HJERNE_UTELAT = [("kurs.likviditet", "lav"), ("innside.kurs_vs_innsider", "ukjent")]
 
+# Egenskaper som hentes og vises på dashboardet, men som modellen IKKE bruker.
+# Walk-forward-test nov. 2026: med alle nye kontekstegenskaper falt
+# rangkorrelasjonen fra 0,08 til 0,05 (mer støy enn signal med ~2 400
+# hendelser). Bare «emisjon siste 90 d» var negativ i begge perioder og
+# forbedret både kort og lang horisont; den er med. Fjern et navn her for å
+# slå egenskapen på (eller sett repo-variabelen HJERNE_EGENSKAPER_AV).
+HJERNE_EGENSKAPER_AV = [x for x in env(
+    "HJERNE_EGENSKAPER_AV",
+    "kontekst.rapport,kontekst.tilbakekjøp90,kurs.short,kurs.volatilitet,kurs.relstyrke20,selskap.sektor,kurs.størrelse",
+).split(",") if x]
+
 # Regelsjekk (enkel, gjennomsiktig strategi ved siden av modellen): likvid,
 # ingen advarsel og minst ett plusstegn. Lister fra analysen av 2023–24,
 # testet på 2025–26 (20 d: +2,0 % over markedet, +1,0 % netto, n=64).
