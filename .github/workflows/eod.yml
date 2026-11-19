@@ -26,11 +26,21 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Hent databasen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.db_lagring hent
+
       - name: Hent kurser
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m src.fetch_prices
+
+      - name: Kontekst (rapporter, tilbakekjøp, emisjoner, short, sektor)
+        env:
+          MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
+        run: python -m src.kontekst_kjor
 
       - name: Hjerne (lær, simuler, foreslå, varsle)
         env:
@@ -50,15 +60,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m src.report
 
-      - name: Commit databasen
-        run: |
-          git config user.name "momentum-bot"
-          git config user.email "actions@github.com"
-          git add data/momentum.db
-          git diff --staged --quiet && echo "ingen endring" && exit 0
-          git commit -m "data: kurser $(date -u +'%Y-%m-%d')"
-          for i in 1 2 3; do
-            git pull --rebase --autostash origin ${{ github.ref_name }} && git push && exit 0
-            sleep 5
-          done
-          exit 1
+      - name: Lagre databasen (release «data-siste»)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.db_lagring last-opp

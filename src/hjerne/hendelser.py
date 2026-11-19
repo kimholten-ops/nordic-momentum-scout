@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from src import marked
+from src.hjerne import kontekst as ktx
 
 ROLLE_RANG = ["ceo", "cfo", "styreleder", "styremedlem", "ledelse", "naerstaaende", "ukjent"]
 ROLLE_GRUPPE = {
@@ -67,6 +68,18 @@ def kursegenskaper(kurser: dict[str, marked.Serie], yahoo: str, publisert: str) 
     r = _r(s.close[i - 1], s.close[i - 21]) if i >= 21 else None
     ut["momentum20"] = "ukjent" if r is None else ("ned >10%" if r < -0.10 else ("opp >10%" if r > 0.10 else "flat"))
     ut["marked"] = (marked.suffiks(yahoo) or "?").lstrip(".")
+
+    # Volatilitet (ATR20 i prosent av kurs) og styrke mot børsen siste 20 dager.
+    atr = marked.atr_andel(s, i) if i >= 21 else None
+    ut["volatilitet"] = "ukjent" if atr is None else ("lav (<2 %)" if atr < 0.02 else ("middels" if atr < 0.04 else "høy (>4 %)"))
+    idx = kurser.get(marked.indeks_for(yahoo) or "")
+    rel = None
+    if r is not None and idx and i >= 21:
+        a, b = idx.indeks_til_og_med(s.datoer[i - 21]), idx.indeks_til_og_med(s.datoer[i - 1])
+        ri = _r(idx.close[b], idx.close[a]) if a >= 0 and b > a else None
+        rel = r - ri if ri is not None else None
+    ut["relstyrke20"] = "ukjent" if rel is None else ("svakere enn børsen" if rel < -0.05 else
+                                                      "sterkere enn børsen" if rel > 0.05 else "som børsen")
 
     # Langsiktig trend (ca. 6 måneder).
     r = _r(s.close[i - 1], s.close[i - 127]) if i >= 127 else None
@@ -126,10 +139,12 @@ def _boette_kurs_vs_innsider(r: float | None) -> str:
             "over (2–10 %)" if r <= 0.10 else "langt over (>10 %)")
 
 
-def innsidehendelser(con, kurser: dict[str, marked.Serie], horisont: int | None = None) -> list[Hendelse]:
+def innsidehendelser(con, kurser: dict[str, marked.Serie], horisont: int | None = None,
+                     kx: ktx.Kontekst | None = None) -> list[Hendelse]:
     from src.config import HJERNE_HORISONT
 
     horisont = horisont or HJERNE_HORISONT
+    kx = kx if kx is not None else ktx.last(con)
     rader = con.execute(
         "SELECT h.*, s.yahoo, COALESCE(n.selskap_navn, h.selskap_slug) AS navn "
         "FROM innsidehandler h JOIN selskaper s ON s.slug = h.selskap_slug "
@@ -244,7 +259,8 @@ def innsidehendelser(con, kurser: dict[str, marked.Serie], horisont: int | None 
                                 "flere kjøpere enn selgere" if len(kjopere90) > len(selgere90) else
                                 "like mange eller flere selgere")
 
-        eg.update({f"kurs.{k}": v for k, v in kursegenskaper(kurser, yahoo, siste).items()})
+        eg.update({f"kurs.{n}": v for n, v in kursegenskaper(kurser, yahoo, siste).items()})
+        eg.update(ktx.egenskaper(kx, kurser, slug, yahoo, siste))
         personer = ", ".join(sorted({f"{k['person'] or '?'} ({k['rolle_tekst'] or k['rolle']})" for k in ks}))[:200]
         ut.append(Hendelse(
             nokkel=f"innside:{slug}:{dag}", kilde="innside", slug=slug, navn=ks[0]["navn"], yahoo=yahoo,
@@ -254,7 +270,8 @@ def innsidehendelser(con, kurser: dict[str, marked.Serie], horisont: int | None 
     return ut
 
 
-def nyhetshendelser(con, kurser: dict[str, marked.Serie]) -> list[Hendelse]:
+def nyhetshendelser(con, kurser: dict[str, marked.Serie], kx: ktx.Kontekst | None = None) -> list[Hendelse]:
+    kx = kx if kx is not None else ktx.last(con)
     rader = con.execute(
         "SELECT h.id, h.selskap_slug, h.publisert, h.tittel, s.yahoo, COALESCE(s.navn, h.selskap_slug) AS navn, "
         "  k.kategori, k.retning, k.overraskelse "
@@ -273,7 +290,8 @@ def nyhetshendelser(con, kurser: dict[str, marked.Serie]) -> list[Hendelse]:
             "nyhet.retning": r["retning"] or "ukjent",
             "nyhet.overraskelse": "ukjent" if o is None else ("høy (4-5)" if o >= 4 else ("middels (3)" if o == 3 else "lav (1-2)")),
         }
-        eg.update({f"kurs.{k}": v for k, v in kursegenskaper(kurser, r["yahoo"], r["publisert"]).items()})
+        eg.update({f"kurs.{n}": v for n, v in kursegenskaper(kurser, r["yahoo"], r["publisert"]).items()})
+        eg.update(ktx.egenskaper(kx, kurser, r["selskap_slug"], r["yahoo"], r["publisert"]))
         ut.append(Hendelse(
             nokkel=f"nyhet:{r['id']}", kilde="nyhet", slug=r["selskap_slug"], navn=r["navn"], yahoo=r["yahoo"],
             publisert=r["publisert"], egenskaper=eg, beskrivelse=f"{r['kategori']}: {r['tittel'][:140]}",
@@ -282,4 +300,5 @@ def nyhetshendelser(con, kurser: dict[str, marked.Serie]) -> list[Hendelse]:
 
 
 def alle(con, kurser: dict[str, marked.Serie]) -> list[Hendelse]:
-    return sorted(innsidehendelser(con, kurser) + nyhetshendelser(con, kurser), key=lambda h: h.publisert)
+    kx = ktx.last(con)
+    return sorted(innsidehendelser(con, kurser, kx=kx) + nyhetshendelser(con, kurser, kx=kx), key=lambda h: h.publisert)

@@ -32,6 +32,10 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Hent databasen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.db_lagring hent
 
       - name: Hent arkivet fra MFN og tolk med regler
         run: python -m src.innside.arkiv --fra "${{ inputs.fra }}"
@@ -55,11 +59,15 @@ jobs:
           python -c "import sqlite3; c=sqlite3.connect('data/momentum.db'); c.execute('VACUUM'); c.close()"
           ls -la data/
 
-      - name: Commit data og univers
+      - name: Lagre databasen (release «data-siste»)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.db_lagring last-opp
+      - name: Commit univers
         run: |
           git config user.name "momentum-bot"
           git config user.email "actions@github.com"
-          git add data/momentum.db universe/tickers.csv
+          git add universe/tickers.csv
           git diff --staged --quiet && echo "ingen endring" && exit 0
           git commit -m "data: innside-arkiv fra ${{ inputs.fra }} $(date -u +'%Y-%m-%d %H:%M')"
           for i in 1 2 3; do

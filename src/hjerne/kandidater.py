@@ -22,6 +22,7 @@ from bisect import bisect_right
 from datetime import date, timedelta
 
 from src import marked
+from src.config import REGEL_ADVARSEL, REGEL_LIKVID, REGEL_PLUSS
 from src.hjerne.hendelser import Hendelse
 from src.hjerne.modell import Modell
 from src.hjerne.simuler import LIMIT_PAASLAG, Param, _egenskaper, _legg_til_handelsdager, stopp_andel
@@ -53,6 +54,15 @@ def _horisont(m: Modell, eg: dict, h: int, inn: float, kost: float, inn_dato: da
         "kjop": pred >= edge_min and sikk >= sikk_min,
         "bidrag": bidrag[:5],
     }
+
+
+def regelsjekk(eg: dict[str, str]) -> dict:
+    """Den enkle regelstrategien fra analysen: likvid, ingen advarsel, minst
+    ett plusstegn. Gjennomsiktig ved siden av modellen."""
+    pluss = [f"{f.split('.')[-1]}: {v}" for f, v in REGEL_PLUSS if eg.get(f) == v]
+    advarsler = [f"{f.split('.')[-1]}: {v}" for f, v in REGEL_ADVARSEL if eg.get(f) == v]
+    likvid = eg.get("kurs.likviditet") in REGEL_LIKVID
+    return {"ok": likvid and not advarsler and bool(pluss), "likvid": likvid, "pluss": pluss, "advarsler": advarsler}
 
 
 def ranger(
@@ -110,6 +120,9 @@ def ranger(
 
         # Merket følger den ABSOLUTTE forventningen; scoren er bare relativ.
         beste = max(k["forventet"], lg["forventet"])
+        filt = p_kort.utelatt(h.egenskaper)
+        if filt:
+            k["kjop"] = lg["kjop"] = False
         if (k["kjop"] or lg["kjop"]) and status != "sen":
             anbefaling = "kjøp"
         elif beste > 0:
@@ -134,6 +147,7 @@ def ranger(
             "break_even": limit * (1 + kost),
             "egenskaper": h.egenskaper,
             "regelscore": (regelscore or {}).get((h.slug, h.publisert[:10])),
+            "filter": filt, "regelsjekk": regelsjekk(h.egenskaper),
         })
     # Én rad per selskap: den nyeste hendelsen, med antall hendelser i perioden.
     per_selskap: dict[str, dict] = {}

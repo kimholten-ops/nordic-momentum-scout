@@ -92,7 +92,23 @@ har data) klassifiserte nyheter — og simulerer handler med det den har lært.
   siste 30 dager, verdi, andel av beholdningen, likviditet, 20-dagers momentum,
   6-måneders trend, avstand til 52-ukers topp/bunn, kursreaksjon og volum på
   meldingsdagen (bare når meldingen kom i børstiden), markedsregime (indeks
-  over/under 200-dagers snitt), børs, og for nyheter kategori/retning/overraskelse.
+  over/under 200-dagers snitt), børs, volatilitet (ATR20), styrke mot børsen
+  siste 20 dager, og for nyheter kategori/retning/overraskelse.
+- **Kontekst** (`src/hjerne/kontekst.py`, data fra `src.kontekst_kjor`):
+  dager siden siste kvartals-/årsrapport, tilbakekjøp og emisjon siste 90
+  dager (MFN), netto shortandel for Oslo-aksjer (Finanstilsynet), sektor og
+  børsverdi (Yahoo: antall aksjer × kurs). Alt regnes fra det som var kjent
+  før publisering; mangler kilden, blir verdien «ukjent». Engangsfylling:
+  Actions → «Kontekst arkiv (engangs)». Daglig oppdatering i «Kurser og rapport».
+- **Totalavkastning:** utbytte (Yahoo, per eksdato) legges til aksjens
+  avkastning. OSEBX er totalavkastningsindeks; de andre børsenes prisindekser
+  får et anslått utbyttetillegg (`INDEKS_UTBYTTE_AAR`).
+- **Harde filtre** (`HJERNE_UTELAT`): illikvide aksjer og kjøp der innsiders
+  kurs er ukjent papirhandles og anbefales aldri — begge var negative i både
+  2023–24 og 2025–26.
+- **Regelsjekk** (`REGEL_*`): en enkel, gjennomsiktig strategi ved siden av
+  modellen (likvid, ingen advarsel, minst ett plusstegn), vist som
+  «✓ Regelsjekk» på kandidatene.
 - **Walk-forward:** hver dag trenes modellen bare på utfall som var kjent før
   den dagen. Den lærer av alle hendelser, ikke bare dem den handlet.
 - **Papirhandel:** åpner når forventet verdi ≥ `HJERNE_MIN_EDGE` og sikkerhet ≥
@@ -204,6 +220,12 @@ neste gang universet lastes.
 
 ## Datamodell
 
+Databasen (`data/momentum.db`) ligger **ikke i git**, men som komprimert
+vedlegg på GitHub-releasen `data-siste` (`scripts/db_lagring.py`). Hver jobb
+henter den først og laster den opp til slutt; `momentum-forrige.db.gz` er
+versjonen før siste opplasting. Et vedlegg kan være opptil 2 GB og vokser
+ikke i git-historikken. Lokalt: `python -m scripts.db_lagring hent`.
+
 | Tabell | Innhold |
 |---|---|
 | `nyheter` | Én rad per pressemelding, én per språk/distributør. Endres aldri i ettertid (`brodtekst` er unntaket — den fylles inn når en hendelse skal klassifiseres). |
@@ -214,6 +236,10 @@ neste gang universet lastes.
 | `hendelser` | Dedupliserte nyheter — én rad per faktisk hendelse, med kanonisk tittel. |
 | `hendelse_nyheter` | Kobling nyhet → hendelse (én nyhet tilhører nøyaktig én hendelse). |
 | `klassifiseringer` | Resultat per hendelse per `PROMPT_VERSJON` — regelbasert (`rutine`) eller Claude Haiku (`ok`/`feilet`). |
+| `selskapshendelser` | Rapporter, tilbakekjøp og emisjoner per selskap fra MFN (bare dato og type). |
+| `selskap_isin` | ISIN per selskap (fra MFN), til koblingen mot shortregisteret. |
+| `short` | Netto shortandel per ISIN og endringsdag (Finanstilsynet, Oslo). |
+| `selskapsinfo` | Sektor, bransje og antall aksjer fra Yahoo (oppdateres månedlig). |
 | `arkiv_fremdrift` | Hvor langt `src.backfill_arkiv` er kommet per selskap, for gjenopptakelse. |
 
 `nyheter.hentet` minus `nyheter.publisert` er den viktigste kolonnen i fase

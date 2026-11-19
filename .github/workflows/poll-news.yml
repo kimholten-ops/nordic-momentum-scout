@@ -28,6 +28,11 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Hent databasen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.db_lagring hent
+
       - name: Hent nyheter
         env:
           MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
@@ -65,16 +70,7 @@ jobs:
           HJERNE_VARSLE: ${{ vars.HJERNE_VARSLE || '1' }}
         run: python -m src.hjerne_kjor
 
-      - name: Commit databasen
-        run: |
-          git config user.name "momentum-bot"
-          git config user.email "actions@github.com"
-          git add data/momentum.db
-          git diff --staged --quiet && echo "ingen endring" && exit 0
-          git commit -m "data: nyheter $(date -u +'%Y-%m-%d %H:%M')"
-          # Rebase mot origin i tilfelle en annen jobb rakk å pushe.
-          for i in 1 2 3; do
-            git pull --rebase --autostash origin ${{ github.ref_name }} && git push && exit 0
-            sleep 5
-          done
-          exit 1
+      - name: Lagre databasen (release «data-siste»)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.db_lagring last-opp

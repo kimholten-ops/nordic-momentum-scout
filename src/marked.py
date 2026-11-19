@@ -8,16 +8,20 @@ Regler som gjelder overalt:
 - Utgang er sluttkurs h handelsdager etter inngangsdagen.
 - Meravkastning = aksjens avkastning minus indeksens avkastning over samme
   dager (indeksen fra inngangsdagens sluttkurs forrige dag til utgangsdagen).
+- Avkastning er TOTALavkastning: utbytte med eksdato etter inngangsdagen og
+  til og med utgangsdagen legges til. Prisindekser får et anslått
+  utbyttetillegg (INDEKS_UTBYTTE_AAR), OSEBX er allerede totalavkastning.
 - Mangler kurs, er utfallet None — aldri imputert.
 """
 from __future__ import annotations
 
 import statistics
 from bisect import bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from src.config import (
+    INDEKS_UTBYTTE_AAR,
     INDEKSER,
     INNSIDE_FX_NOK,
     KURTASJE_KR,
@@ -36,6 +40,12 @@ class Serie:
     low: list[float | None]
     close: list[float | None]
     volum: list[int | None]
+    utbytte: list[float | None] = field(default_factory=list)  # per aksje, på eksdato
+
+    def utbytte_mellom(self, i: int, j: int) -> float:
+        """Sum utbytte per aksje med eksdato i (i, j] — det du får hvis du
+        kjøper på dag i (åpning) og selger på dag j."""
+        return sum(x for x in self.utbytte[i + 1:j + 1] if x)
 
     def indeks_etter(self, dag: str) -> int:
         """Første posisjon med dato STRENGT etter `dag` (YYYY-MM-DD)."""
@@ -51,7 +61,8 @@ def last_kurser(con) -> dict[str, Serie]:
     # Rader uten sluttkurs (Yahoo-hull) tas ikke med: de ville gjort "siste
     # kurs" ukjent og stoppet både kandidater og papirhandler.
     for r in con.execute(
-        "SELECT yahoo, dato, open, high, low, close, volum FROM kurser WHERE close IS NOT NULL ORDER BY yahoo, dato"
+        "SELECT yahoo, dato, open, high, low, close, volum, utbytte FROM kurser WHERE close IS NOT NULL "
+        "ORDER BY yahoo, dato"
     ):
         s = ut.get(r["yahoo"])
         if s is None:
@@ -62,6 +73,7 @@ def last_kurser(con) -> dict[str, Serie]:
         s.low.append(r["low"])
         s.close.append(r["close"])
         s.volum.append(r["volum"])
+        s.utbytte.append(r["utbytte"])
     return ut
 
 
@@ -141,7 +153,7 @@ def utfall(kurser: dict[str, Serie], yahoo: str, publisert: str, h: int) -> Utfa
     inn, ut = s.open[i], s.close[i + h]
     if not inn or not ut:
         return None
-    raa = ut / inn - 1
+    raa = (ut + s.utbytte_mellom(i, i + h)) / inn - 1
     marked = None
     idx = kurser.get(indeks_for(yahoo) or "")
     if idx:
@@ -152,11 +164,16 @@ def utfall(kurser: dict[str, Serie], yahoo: str, publisert: str, h: int) -> Utfa
         if a >= 0 and b >= a and idx.close[b]:
             start = idx.open[a] if idx.datoer[a] == s.datoer[i] and idx.open[a] else idx.close[a]
             if start:
-                marked = idx.close[b] / start - 1
+                marked = idx.close[b] / start - 1 + indeks_utbytte(yahoo, h)
     mer = raa - (marked or 0.0)
     oms = til_nok(omsetning_nok(s, i), yahoo)
     k = kostnad(oms)
     return Utfall(s.datoer[i], s.datoer[i + h], inn, ut, raa, marked, mer, k, mer - k)
+
+
+def indeks_utbytte(yahoo: str | None, handelsdager: int) -> float:
+    """Anslått utbytte i en prisindeks over `handelsdager` (0 for OSEBX)."""
+    return INDEKS_UTBYTTE_AAR.get(suffiks(yahoo) or "", 0.0) * handelsdager / 252
 
 
 def atr_andel(serie: Serie, i: int, dager: int = 20) -> float | None:

@@ -38,6 +38,7 @@ def _last_ned(con: sqlite3.Connection, symboler: list[str], start: str) -> int:
             interval="1d",
             group_by="ticker",
             auto_adjust=False,
+            actions=True,  # utbytte (Dividends) per eksdato
             progress=False,
             threads=True,
         )
@@ -59,11 +60,12 @@ def _last_ned(con: sqlite3.Connection, symboler: list[str], start: str) -> int:
                     continue
                 # Upsert som aldri overskriver en kjent verdi med NULL.
                 con.execute(
-                    "INSERT INTO kurser (yahoo, dato, open, high, low, close, volum) VALUES (?,?,?,?,?,?,?) "
+                    "INSERT INTO kurser (yahoo, dato, open, high, low, close, volum, utbytte) VALUES (?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(yahoo, dato) DO UPDATE SET "
                     " open = COALESCE(excluded.open, kurser.open), high = COALESCE(excluded.high, kurser.high), "
                     " low = COALESCE(excluded.low, kurser.low), close = COALESCE(excluded.close, kurser.close), "
-                    " volum = COALESCE(excluded.volum, kurser.volum)",
+                    " volum = COALESCE(excluded.volum, kurser.volum), "
+                    " utbytte = COALESCE(excluded.utbytte, kurser.utbytte)",
                     (
                         sym,
                         idx.date().isoformat(),
@@ -72,6 +74,7 @@ def _last_ned(con: sqlite3.Connection, symboler: list[str], start: str) -> int:
                         _f(rad.get("Low")),
                         _f(rad.get("Close")),
                         _i(rad.get("Volume")),
+                        _f(rad.get("Dividends")) or None,  # 0 lagres som NULL (sparer plass)
                     ),
                 )
                 rader += 1
