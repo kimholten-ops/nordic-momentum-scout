@@ -21,8 +21,9 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 IKKE_EGENSKAP = {"yahoo", "dato", "fasit_mer", "fasit_netto", "ut_dato", "kostnad"}
 KATEGORISK = ["marked", "sektor"]
-PARAM = dict(n_estimators=300, learning_rate=0.03, num_leaves=15, min_child_samples=300, subsample=0.8,
-             subsample_freq=1, colsample_bytree=0.8, reg_lambda=5.0, verbose=-1, random_state=1)
+RUNDER = 300
+PARAM = dict(objective="regression", learning_rate=0.03, num_leaves=15, min_data_in_leaf=300, bagging_fraction=0.8,
+             bagging_freq=1, feature_fraction=0.8, lambda_l2=5.0, verbose=-1, seed=1, num_threads=0)
 TEST_FRA = "2024-07-01"
 
 NAVN = {
@@ -62,17 +63,22 @@ def egenskaper(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if c not in IKKE_EGENSKAP and c != "region" and df[c].notna().any()]
 
 
-def _modell():
+class _Modell:
+    """Tynn innpakning rundt lightgbm.Booster (uten scikit-learn-avhengighet)."""
+
+    def __init__(self, booster):
+        self.booster_ = booster
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return self.booster_.predict(X)
+
+
+def _tren(tr: pd.DataFrame, eg: list[str]) -> _Modell:
     import lightgbm as lgb
 
-    return lgb.LGBMRegressor(**PARAM)
-
-
-def _tren(tr: pd.DataFrame, eg: list[str]):
-    m = _modell()
     y = tr.groupby("dato")["fasit_mer"].rank(pct=True)
-    m.fit(tr[eg], y, categorical_feature=[k for k in KATEGORISK if k in eg])
-    return m
+    ds = lgb.Dataset(tr[eg], label=y, categorical_feature=[k for k in KATEGORISK if k in eg], free_raw_data=False)
+    return _Modell(lgb.train(PARAM, ds, num_boost_round=RUNDER))
 
 
 def walk_forward(df: pd.DataFrame, eg: list[str], test_fra: str = TEST_FRA) -> pd.DataFrame:
