@@ -22,6 +22,7 @@ from src.config import (
     KLASSIFISERING_LLM,
     KLASSIFISERING_MODELL,
     OLLAMA_MODELL,
+    OLLAMA_NUM_CTX,
     OLLAMA_URL,
 )
 from src.klassifisering.kategorier import KATEGORIER, KATEGORI_BESKRIVELSE, RETNINGER
@@ -73,7 +74,7 @@ def sjekk_svar(r: requests.Response) -> None:
 def _kall_ollama(prompt: str, system: str) -> str:
     r = requests.post(
         f"{OLLAMA_URL.rstrip('/')}/api/chat",
-        json={"model": OLLAMA_MODELL, "stream": False, "format": "json", "options": {"temperature": 0},
+        json={"model": OLLAMA_MODELL, "stream": False, "format": "json", "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
               "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}]},
         timeout=300,
     )

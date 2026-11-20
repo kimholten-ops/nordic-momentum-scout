@@ -18,6 +18,7 @@ from src.config import (
     INNSIDE_LLM,
     KLASSIFISERING_MODELL,
     OLLAMA_MODELL,
+    OLLAMA_NUM_CTX,
     OLLAMA_URL,
 )
 from src.innside.parser import INSTRUMENTER, RETNINGER, Handel, rolle_fra_tekst
@@ -105,7 +106,7 @@ def _kall_ollama(prompt: str) -> str:
             "model": OLLAMA_MODELL,
             "stream": False,
             "format": "json",
-            "options": {"temperature": 0},
+            "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
             "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
         },
         timeout=300,

@@ -50,6 +50,24 @@ CREATE TABLE IF NOT EXISTS selskapshendelser (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_selskapshendelser_slug ON selskapshendelser(slug, type, publisert);
 
+-- Nøkkeltall fra rapporter, tolket av Ollama på PC-en (src/rapport.py).
+CREATE TABLE IF NOT EXISTS rapporttall (
+    group_id            TEXT PRIMARY KEY,   -- = selskapshendelser.group_id
+    slug                TEXT NOT NULL,
+    publisert           TEXT NOT NULL,
+    periode             TEXT,
+    valuta              TEXT,
+    omsetning           REAL, omsetning_fjor      REAL,
+    driftsresultat      REAL, driftsresultat_fjor REAL,
+    eps                 REAL, eps_fjor            REAL,
+    omsetningsvekst_pst REAL,
+    utsikter            TEXT,
+    tone                INTEGER,
+    modell              TEXT,
+    tolket              TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rapporttall_slug ON rapporttall(slug, publisert);
+
 -- ISIN per selskap (fra MFN), for å koble mot shortregisteret.
 CREATE TABLE IF NOT EXISTS selskap_isin (slug TEXT NOT NULL, isin TEXT NOT NULL, PRIMARY KEY (slug, isin)) WITHOUT ROWID;
 
@@ -265,7 +283,8 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 # Kolonner lagt til etter at tabellen fantes. CREATE TABLE IF NOT EXISTS
 # endrer ikke eksisterende tabeller, så de legges til her.
 MIGRERINGER = [("innsidehandler", "beholdning_etter", "REAL"), ("hjerne_trades", "belop", "REAL"),
-               ("kurser", "utbytte", "REAL")]
+               ("kurser", "utbytte", "REAL"), ("selskapshendelser", "url", "TEXT"),
+               ("selskapshendelser", "tittel", "TEXT")]
 
 
 def _migrer(con: sqlite3.Connection) -> None:
