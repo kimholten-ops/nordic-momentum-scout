@@ -29,7 +29,7 @@ from src.config import (
     SLIPPAGE_ETTER_OMSETNING,
 )
 
-VALUTA_ETTER_SUFFIKS = {".OL": "NOK", ".ST": "SEK", ".HE": "EUR", ".CO": "DKK"}
+VALUTA_ETTER_SUFFIKS = {".OL": "NOK", ".ST": "SEK", ".HE": "EUR", ".CO": "DKK", ".US": "USD"}
 
 
 @dataclass
@@ -80,7 +80,11 @@ def last_kurser(con) -> dict[str, Serie]:
 def suffiks(yahoo: str | None) -> str | None:
     if not yahoo:
         return None
-    return next((s for s in INDEKSER if yahoo.upper().endswith(s)), None)
+    funnet = next((s for s in INDEKSER if s != ".US" and yahoo.upper().endswith(s)), None)
+    if funnet:
+        return funnet
+    # Amerikanske symboler har ingen endelse (SOFI, BRK-B); indekser starter med ^.
+    return ".US" if "." not in yahoo and not yahoo.startswith("^") else None
 
 
 def indeks_for(yahoo: str | None) -> str | None:

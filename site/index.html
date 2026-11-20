@@ -102,6 +102,13 @@
   .skala { position:relative; height:8px; background:var(--linje); border-radius:99px; margin:8px 0 4px; }
   .skala i { position:absolute; top:-3px; width:3px; height:14px; border-radius:2px; }
   .knapp.liten { font-size:12px; padding:3px 9px; }
+  /* Aksjescore */
+  .tidelgraf { display:grid; grid-template-columns:repeat(10,1fr); gap:4px; align-items:end; height:90px; margin:8px 0 2px; }
+  .tidelgraf div { border-radius:4px 4px 0 0; min-height:2px; }
+  .tidelakse { display:grid; grid-template-columns:repeat(10,1fr); gap:4px; font-size:11px; color:var(--dempet); text-align:center; }
+  .faktor { font-size:12px; white-space:nowrap; }
+  .faktor b { font-weight:600; }
+  tr.mine td:first-child { box-shadow: inset 3px 0 0 var(--aksent); }
   .varselboks { background:var(--kort); border:1px solid var(--linje); border-radius:10px; padding:12px 14px; margin-top:10px; }
 </style>
 </head>
@@ -119,6 +126,7 @@
 <nav role="tablist" id="faner"></nav>
 <main>
   <section id="kandidater" hidden></section>
+  <section id="aksjescore" hidden></section>
   <section id="simulering" hidden></section>
   <section id="oversikt" hidden></section>
   <section id="hjerne" hidden></section>
@@ -130,7 +138,7 @@
 
 <script>
 "use strict";
-const FANER = [["kandidater","Kandidater"],["simulering","Simulering"],["oversikt","Oversikt"],["hjerne","Hjerne"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
+const FANER = [["kandidater","Kandidater"],["aksjescore","Aksjescore"],["simulering","Simulering"],["oversikt","Oversikt"],["hjerne","Hjerne"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
 const ROLLER = {ceo:"CEO",cfo:"CFO",styreleder:"Styreleder",styremedlem:"Styremedlem",ledelse:"Ledelse",naerstaaende:"Nærstående",ukjent:"Ukjent"};
 const RETNING = {kjop:"Kjøp",salg:"Salg",tildeling:"Tildeling",annet:"Annet"};
 let D = null;
@@ -366,6 +374,60 @@ function kandidaterFane() {
 // inngangsdagen (ikke fylt hvis åpningen er over limit), stopp hvis dagens
 // laveste går under stoppen, salg på sluttkurs på salgsdagen.
 const SIM = {nokkel: "momentum.simulering.v1", forhaandsvalg: null};
+function aksjescoreFane() {
+  const s = document.getElementById("aksjescore"), P = D.panel || {};
+  s.replaceChildren();
+  if (!P.score || !P.score.length) { s.append(el("div", {class: "tom", text: "Faktormodellen har ikke kjørt ennå."})); return; }
+  s.append(el("details", {class: "forklaring"}, el("summary", {text: "Slik leser du aksjescoren"}), el("ul", {},
+    el("li", {text: "Hver aksje får en score hver uke ut fra kurs, volum, rapporter, innsidere, short, utbytte og sektor. Scoren sier hvordan aksjen rangeres mot de andre i samme region (Norden eller USA) — 90 betyr «bedre enn 90 % av aksjene», ikke 90 % sjanse for gevinst."}),
+    el("li", {text: "Forventet 20 d: hvordan aksjene i samme tidel faktisk gjorde det mot børsen de neste 20 handelsdagene, målt på data modellen ikke hadde sett (2024 →). Før kurtasje."}),
+    el("li", {text: "Hva trekker opp/ned: egenskapene som flyttet scoren mest for akkurat denne aksjen."}),
+    el("li", {text: "Norden: modellen er best til å peke ut aksjer som bør unngås (nederste tideler). Kandidater i nederste tredjedel filtreres bort på Kandidater-siden."}),
+    el("li", {text: "USA: universet er dagens 500 mest omsatte aksjer over 1 mrd. USD. Aksjer som har gått konkurs eller krympet er ikke med i historikken, så modellen kan ha lært at «kraftig falne, volatile aksjer kommer tilbake» fordi taperne mangler. Les USA-scoren med stor skepsis."}))));
+  // Kvalitet per region
+  for (const [reg, st] of Object.entries(P.status || {})) {
+    const t = st.tideler || [], maks = Math.max(0.005, ...t.map(x => Math.abs(x.mer)));
+    const graf = el("div", {class: "tidelgraf"}, ...t.map(x => el("div", {title: `Tidel ${x.tidel}: ${pst(x.mer)} (n=${x.n})`,
+      style: `height:${Math.max(2, Math.abs(x.mer) / maks * 88)}px;background:var(${x.mer >= 0 ? "--pos" : "--neg"})`})));
+    s.append(el("div", {class: "kpier"},
+      kpi(reg === "USA" ? "USA (eksperimentell)" : reg, `${st.aksjer} aksjer · testet ${st.uker} uker`),
+      kpi((st.ic || 0).toLocaleString("nb-NO", {maximumFractionDigits: 3}), `rang-IC (t ${(st.ic_t || 0).toFixed(1)}) · ${Math.round((st.ic_andel_pos || 0) * 100)} % uker positive`),
+      kpi(pst(st.topp20_mer), `topp 20 mot børsen (snitt alle ${pst(st.alle_mer)})`),
+      el("div", {class: "kpi"}, el("div", {class: "e", text: "20 d mot børsen per tidel (svak → sterk)"}), graf,
+        el("div", {class: "tidelakse"}, ...t.map(x => el("span", {text: x.tidel}))))));
+  }
+  // Filter
+  let region = "alle", sok = "";
+  const valg = el("div", {class: "chipvalg"});
+  const knapper = [["alle", "Alle"], ["Norden", "Norden"], ["USA", "USA"], ["mine", "Mine"]].map(([k, n]) => {
+    const b = el("button", {"aria-pressed": k === region, text: n});
+    b.addEventListener("click", () => { region = k; knapper.forEach(x => x.setAttribute("aria-pressed", x === b)); tegn(); });
+    return b;
+  });
+  valg.append(...knapper);
+  const felt = el("input", {type: "search", placeholder: "Søk aksje …"});
+  felt.addEventListener("input", () => { sok = felt.value.toLowerCase(); tegn(); });
+  s.append(el("div", {class: "verktoy"}, valg, felt));
+  const ramme = el("div");
+  s.append(ramme);
+  const faktorer = (l, kl) => el("div", {}, ...(l || []).map(f => el("div", {class: "faktor " + kl}, el("b", {text: f.navn}), " " + f.verdi)));
+  function tegn() {
+    const rader = P.score.filter(r => (region === "alle" || (region === "mine" ? r.mine : r.region === region))
+      && (!sok || (r.navn + " " + r.yahoo).toLowerCase().includes(sok))).slice(0, 300);
+    if (!rader.length) { ramme.replaceChildren(el("div", {class: "tabellramme"}, el("div", {class: "tom", text: "Ingen aksjer passer filteret."}))); return; }
+    const hode = el("tr", {}, ...[["Aksje", ""], ["Score", "t"], ["Forventet 20 d", "t"], ["Trekker opp", ""], ["Trekker ned", ""]]
+      .map(([n, k]) => el("th", {class: k, text: n})));
+    const kropp = rader.map(r => el("tr", {class: r.mine ? "mine" : ""},
+      el("td", {}, el("div", {class: "navn", text: r.navn}), el("div", {class: "tick", text: `${r.yahoo} · ${r.region}${r.mine ? " · din" : ""}`})),
+      el("td", {class: "t"}, el("b", {text: Math.round(r.persentil * 100)}), el("div", {class: "bar"}, el("i", {style: `width:${r.persentil * 100}%`}))),
+      el("td", {class: "t " + klasse(r.forventet_mer), text: pst(r.forventet_mer)}),
+      el("td", {}, faktorer(r.opp, "pos")), el("td", {}, faktorer(r.ned, "neg"))));
+    const t = el("div", {class: "tabellramme"}, el("table", {}, el("thead", {}, hode), el("tbody", {}, ...kropp)));
+    ramme.replaceChildren(t);
+  }
+  tegn();
+}
+
 function simLes() { try { return JSON.parse(localStorage.getItem(SIM.nokkel) || "[]"); } catch { return SIM.minne || []; } }
 function simLagre(l) { SIM.minne = l; try { localStorage.setItem(SIM.nokkel, JSON.stringify(l)); } catch {} }
 
@@ -709,7 +771,7 @@ async function start() {
     return;
   }
   document.getElementById("generert").textContent = "Oppdatert " + D.generert.replace("T", " ").slice(0, 16);
-  kandidaterFane(); simuleringFane(); oversikt(); hjerneFane(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
+  kandidaterFane(); aksjescoreFane(); simuleringFane(); oversikt(); hjerneFane(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
     const knapp = document.getElementById("varselknapp");

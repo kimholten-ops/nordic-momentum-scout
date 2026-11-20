@@ -72,6 +72,23 @@ CREATE TABLE IF NOT EXISTS short (
     PRIMARY KEY (isin, dato)
 ) WITHOUT ROWID;
 
+-- Faktormodellen (src/panel/): siste score per aksje og modellens målte kvalitet.
+CREATE TABLE IF NOT EXISTS panel_score (
+    yahoo         TEXT PRIMARY KEY,
+    dato          TEXT NOT NULL,
+    region        TEXT NOT NULL,
+    persentil     REAL NOT NULL,
+    tidel         INTEGER NOT NULL,
+    forventet_mer REAL,
+    kostnad       REAL,
+    bidrag        TEXT            -- JSON: {"opp": [...], "ned": [...]}
+);
+CREATE TABLE IF NOT EXISTS panel_status (
+    region    TEXT PRIMARY KEY,
+    oppdatert TEXT NOT NULL,
+    data      TEXT NOT NULL       -- JSON fra panel.modell.evaluer
+);
+
 -- Selskapsregister, speiler universe/tickers.csv.
 CREATE TABLE IF NOT EXISTS selskaper (
     slug      TEXT PRIMARY KEY,

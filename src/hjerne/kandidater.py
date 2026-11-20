@@ -22,7 +22,7 @@ from bisect import bisect_right
 from datetime import date, timedelta
 
 from src import marked
-from src.config import REGEL_ADVARSEL, REGEL_LIKVID, REGEL_PLUSS
+from src.config import PANEL_FILTER_PERSENTIL, REGEL_ADVARSEL, REGEL_LIKVID, REGEL_PLUSS
 from src.hjerne.hendelser import Hendelse
 from src.hjerne.modell import Modell
 from src.hjerne.simuler import LIMIT_PAASLAG, Param, _egenskaper, _legg_til_handelsdager, stopp_andel
@@ -73,7 +73,9 @@ def ranger(
     p_kort: Param,
     p_lang: Param,
     regelscore: dict[tuple[str, str], float] | None = None,
+    panel: dict[str, dict] | None = None,
 ) -> list[dict]:
+    """panel: siste aksjescore per Yahoo-symbol fra faktormodellen (src/panel)."""
     if not kurser:
         return []
     siste_kursdag = max(s.datoer[-1] for s in kurser.values() if s.datoer)
@@ -121,6 +123,9 @@ def ranger(
         # Merket følger den ABSOLUTTE forventningen; scoren er bare relativ.
         beste = max(k["forventet"], lg["forventet"])
         filt = p_kort.utelatt(h.egenskaper)
+        ps = (panel or {}).get(h.yahoo)
+        if not filt and ps and ps.get("region") == "Norden" and ps["persentil"] < PANEL_FILTER_PERSENTIL:
+            filt = f"aksjescore=svak (tidel {ps['tidel']})"
         if filt:
             k["kjop"] = lg["kjop"] = False
         if (k["kjop"] or lg["kjop"]) and status != "sen":
@@ -147,7 +152,7 @@ def ranger(
             "break_even": limit * (1 + kost),
             "egenskaper": h.egenskaper,
             "regelscore": (regelscore or {}).get((h.slug, h.publisert[:10])),
-            "filter": filt, "regelsjekk": regelsjekk(h.egenskaper),
+            "filter": filt, "regelsjekk": regelsjekk(h.egenskaper), "aksjescore": ps,
         })
     # Én rad per selskap: den nyeste hendelsen, med antall hendelser i perioden.
     per_selskap: dict[str, dict] = {}
