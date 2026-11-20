@@ -21,7 +21,7 @@ from src.config import (
     OLLAMA_URL,
 )
 from src.innside.parser import INSTRUMENTER, RETNINGER, Handel, rolle_fra_tekst
-from src.klassifisering.llm import KlassifiseringsFeil, _parse_json
+from src.klassifisering.llm import APIStengt, KlassifiseringsFeil, _parse_json, sjekk_svar  # noqa: F401
 
 MAKS_FORSOK = 2
 
@@ -134,7 +134,7 @@ def _kall_api(prompt: str, modell: str) -> str:
         },
         timeout=ANTHROPIC_TIMEOUT,
     )
-    r.raise_for_status()
+    sjekk_svar(r)
     return "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
 
 

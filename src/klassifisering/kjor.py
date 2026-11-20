@@ -10,9 +10,9 @@ for å klassifisere alt på nytt med en endret prompt.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from src.config import KLASSIFISERING_MAKS_KALL, KLASSIFISERING_MODELL, TZ
+from src.config import KLASSIFISERING_MAKS_KALL, KLASSIFISERING_MODELL, LLM_FRISK_TIMER, TZ
 from src.klassifisering import llm
 from src.klassifisering.forfilter import sjekk_rutine
 from src.klassifisering.kategorier import PROMPT_VERSJON
@@ -62,9 +62,18 @@ def _lagre(
     )
 
 
-def kjor(con: sqlite3.Connection, maks_kall: int = KLASSIFISERING_MAKS_KALL) -> dict:
-    hendelser = _uklassifiserte(con, PROMPT_VERSJON)
-    na = datetime.now(TZ).isoformat(timespec="seconds")
+def kjor(con: sqlite3.Connection, maks_kall: int = KLASSIFISERING_MAKS_KALL,
+         frisk_timer: float | None = LLM_FRISK_TIMER) -> dict:
+    """frisk_timer: bare hendelser publisert de siste N timene går til LLM
+    (None = alle). Eldre etterslep tas av Ollama på PC-en. Nyeste først, så
+    budsjettet går til det som kan gi varsel."""
+    hendelser = list(reversed(_uklassifiserte(con, PROMPT_VERSJON)))
+    na_dt = datetime.now(TZ)
+    na = na_dt.isoformat(timespec="seconds")
+    grense = (na_dt - timedelta(hours=frisk_timer)).replace(tzinfo=None).isoformat() if frisk_timer else ""
+    ki = llm.tilgjengelig()
+    api_stengt = None
+    for_gamle = 0
 
     filtrert = 0
     llm_kall = 0
@@ -84,7 +93,10 @@ def kjor(con: sqlite3.Connection, maks_kall: int = KLASSIFISERING_MAKS_KALL) -> 
             filtrert += 1
             continue
 
-        if llm_kall >= maks_kall:
+        if (h["publisert"] or "") < grense:
+            for_gamle += 1
+            continue  # etterslep: Ollama på PC-en
+        if llm_kall >= maks_kall or api_stengt or not ki:
             stanset_av_budsjett += 1
             continue  # ingenting lagres - tas opp igjen neste kjøring
 
@@ -112,6 +124,9 @@ def kjor(con: sqlite3.Connection, maks_kall: int = KLASSIFISERING_MAKS_KALL) -> 
         try:
             resultat = llm.klassifiser(h["tittel"], brodtekst, h["publisert"])
             _lagre(con, h["id"], KLASSIFISERING_MODELL, "ok", resultat, na)
+        except llm.APIStengt as e:
+            api_stengt = str(e)  # ikke meldingens feil: ingenting lagres, stopp kallene
+            continue
         except llm.KlassifiseringsFeil:
             _lagre(con, h["id"], KLASSIFISERING_MODELL, "feilet", {}, na)
             feilet += 1
@@ -125,4 +140,6 @@ def kjor(con: sqlite3.Connection, maks_kall: int = KLASSIFISERING_MAKS_KALL) -> 
         "brodtekst_feilet": brodtekst_feilet,
         "stanset_av_budsjett": stanset_av_budsjett,
         "tokens_estimat": tokens_estimat,
+        "for_gamle": for_gamle,
+        "api_stengt": api_stengt,
     }
