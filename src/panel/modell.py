@@ -38,8 +38,11 @@ NAVN = {
     "tilbakekjop_90": "Tilbakekjøp siste 90 d", "innside_kjop_90": "Innsidekjøp 90 d",
     "innside_kjopere_90": "Innsidekjøpere 90 d", "innside_kjop_30": "Innsidekjøp 30 d",
     "innside_netto_mnok_90": "Netto innsidekjøp 90 d", "short_pst": "Short",
+    "rapport_omsvekst": "Omsetningsvekst (siste rapport)", "rapport_marginendring": "Endring i driftsmargin",
+    "rapport_epsvekst": "Vekst i resultat per aksje", "rapport_utsikter": "Utsikter (hevet/senket)",
+    "rapport_tone": "Tone i rapporten",
 }
-PROSENT = {"mom_12_1", "mom_6_1", "mom_1m", "mom_1u", "fra_52u_topp", "over_52u_bunn", "vol_60", "over_ma200",
+PROSENT = {"rapport_omsvekst", "rapport_marginendring", "rapport_epsvekst", "mom_12_1", "mom_6_1", "mom_1m", "mom_1u", "fra_52u_topp", "over_52u_bunn", "vol_60", "over_ma200",
            "rel_6m", "indeks_over_ma200", "indeks_1m", "utbytte_12m", "rapport_reaksjon", "drift_etter_rapport"}
 
 
@@ -130,6 +133,8 @@ def _verdi_tekst(k: str, v) -> str:
         return f"{v:.1f} %"
     if k in ("emisjon_90", "tilbakekjop_90"):
         return "ja" if v else "nei"
+    if k == "rapport_utsikter":
+        return {1: "hevet", 0: "uendret", -1: "senket"}.get(int(v), "–")
     if isinstance(v, float):
         return f"{v:.1f}" if abs(v) < 100 else f"{v:.0f}"
     return str(v)

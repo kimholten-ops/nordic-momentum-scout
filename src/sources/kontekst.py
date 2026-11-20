@@ -67,11 +67,17 @@ def lagre_mfn(con, items: list[dict], type_: str, kjente: set[str]) -> int:
             continue
         for isin in a.get("isins") or []:
             con.execute("INSERT OR IGNORE INTO selskap_isin (slug, isin) VALUES (?,?)", (slug, isin))
-        cur = con.execute(
-            "INSERT OR IGNORE INTO selskapshendelser (group_id, slug, type, publisert) VALUES (?,?,?,?)",
-            (it.get("group_id") or it.get("news_id"), slug, type_, _lokal(c["publish_date"])),
-        )
-        nye += cur.rowcount
+        gid = it.get("group_id") or it.get("news_id")
+        fantes = con.execute("SELECT url FROM selskapshendelser WHERE group_id = ?", (gid,)).fetchone()
+        if fantes is None:
+            con.execute(
+                "INSERT INTO selskapshendelser (group_id, slug, type, publisert, url, tittel) VALUES (?,?,?,?,?,?)",
+                (gid, slug, type_, _lokal(c["publish_date"]), it.get("url"), (c.get("title") or "")[:300]),
+            )
+            nye += 1
+        elif not fantes[0] and it.get("url"):  # eldre rader uten lenke (før rapporttolkningen)
+            con.execute("UPDATE selskapshendelser SET url = ?, tittel = ? WHERE group_id = ?",
+                        (it.get("url"), (c.get("title") or "")[:300], gid))
     return nye
 
 

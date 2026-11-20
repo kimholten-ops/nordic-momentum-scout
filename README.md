@@ -81,9 +81,12 @@ og det kommer høyst én Telegram-melding om dagen.
 ```powershell
 python -m scripts.ollama_tolk          # kan avbrytes og startes igjen
 ```
-Skriptet tar to køer: innsidemeldinger (`data/ollama/tolkninger.jsonl`) og
-uklassifiserte børsmeldinger (`data/ollama/klassifiseringer.jsonl`,
-`--bare nyheter` for bare den). Det pusher hver 50. tolkning til grenen `ollama-tolkninger` (uten å røre arbeidsmappen eller
+Skriptet tar tre køer: innsidemeldinger (`data/ollama/tolkninger.jsonl`),
+nøkkeltall fra kvartalsrapporter (`data/ollama/rapporter.jsonl`, `--bare
+rapporter`) og uklassifiserte børsmeldinger (`data/ollama/klassifiseringer.jsonl`,
+`--bare nyheter`). Rapportene gir faktormodellen omsetningsvekst, endring i
+driftsmargin, vekst i resultat per aksje, utsikter (hevet/uendret/senket) og
+tone (`src/rapport.py`). Det pusher hver 50. tolkning til grenen `ollama-tolkninger` (uten å røre arbeidsmappen eller
 databasen lokalt). Workflowen **Importer Ollama-tolkninger** henter dem
 derfra annenhver time og legger dem inn i databasen.
 Regn med 5–30 sekunder per melding avhengig av maskinen.
@@ -95,7 +98,9 @@ hver uke. Ett panel med én rad per aksje per uke (~140 000 rader) og
 egenskaper kjent ved sluttkurs: momentum (12, 6, 1 mnd, 1 uke), avstand til
 52-ukers topp/bunn, volatilitet, likviditet, volum, 200-dagers snitt, styrke
 mot børsen, børsens trend, utbytte, børsverdi, sektor, reaksjon og volum på
-siste kvartalsrapport, emisjon/tilbakekjøp, innsidekjøp og short. Mål: 20
+siste kvartalsrapport, nøkkeltall fra rapporten (vekst, margin, EPS,
+utsikter, tone — når Ollama har tolket den), emisjon/tilbakekjøp,
+innsidekjøp og short. Mål: 20
 handelsdagers meravkastning mot børsen (kjøp på åpning neste dag).
 
 - LightGBM, én modell per region, lærer å rangere aksjene mot hverandre.
@@ -272,6 +277,7 @@ ikke i git-historikken. Lokalt: `python -m scripts.db_lagring hent`.
 | `selskapshendelser` | Rapporter, tilbakekjøp og emisjoner per selskap fra MFN (bare dato og type). |
 | `selskap_isin` | ISIN per selskap (fra MFN), til koblingen mot shortregisteret. |
 | `short` | Netto shortandel per ISIN og endringsdag (Finanstilsynet, Oslo). |
+| `rapporttall` | Nøkkeltall per rapport (omsetning, driftsresultat, EPS mot i fjor, utsikter, tone), tolket av Ollama. |
 | `selskapsinfo` | Sektor, bransje og antall aksjer fra Yahoo (oppdateres månedlig). |
 | `arkiv_fremdrift` | Hvor langt `src.backfill_arkiv` er kommet per selskap, for gjenopptakelse. |
 

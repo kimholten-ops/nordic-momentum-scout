@@ -86,6 +86,12 @@ def last_data(con) -> dict:
             d, p = short.setdefault(r[0], ([], []))
             d.append(r[1])
             p.append(r[2])
+    rapporter: dict[str, list[tuple]] = defaultdict(list)  # slug -> [(publisert, egenskaper)]
+    if "rapporttall" in tab:
+        from src import rapport
+
+        for r in con.execute("SELECT * FROM rapporttall ORDER BY publisert"):
+            rapporter[r["slug"]].append((r["publisert"], rapport.avledet(dict(r))))
     info = {}
     if "selskapsinfo" in tab:
         info = {r[0]: (r[1], r[2]) for r in con.execute("SELECT yahoo, sektor, aksjer FROM selskapsinfo")}
@@ -95,7 +101,7 @@ def last_data(con) -> dict:
         with fil.open(encoding="utf-8") as fh:
             usa = {r["symbol"]: r for r in csv.DictReader(fh)}
     return {"kurser": kurser, "slug": sel, "usa": usa, "slugs_for": slugs_for, "hend": hend, "innside": innside,
-            "isin": isin, "short": short, "info": info,
+            "isin": isin, "short": short, "info": info, "rapporter": rapporter,
             "short_start": min((d[0] for d, _ in short.values() if d), default=None)}
 
 
@@ -152,6 +158,8 @@ def bygg(data: dict, horisont: int = HORISONT, fra: str | None = None, med_fasit
         rap_i = [x[0] for x in rapporter]
         emisjon = sorted(p for sl in slugs for p in data["hend"].get((sl, "emisjon"), []))
         tilbake = sorted(p for sl in slugs for p in data["hend"].get((sl, "tilbakekjop"), []))
+        rap = sorted((x for sl in slugs for x in data.get("rapporter", {}).get(sl, [])), key=lambda x: x[0])
+        rap_p = [x[0] for x in rap]
         handler = sorted((h for sl in slugs for h in data["innside"].get(sl, [])), key=lambda h: h[0] or "")
         hp = [h[0] for h in handler]
         isiner = set().union(*(data["isin"].get(sl, set()) for sl in slugs)) if slugs else set()
@@ -205,6 +213,12 @@ def bygg(data: dict, horisont: int = HORISONT, fra: str | None = None, med_fasit
             if slugs and data["hend"]:
                 f["emisjon_90"] = float(any(d90 <= p <= grense for p in emisjon))
                 f["tilbakekjop_90"] = float(any(d90 <= p <= grense for p in tilbake))
+            # --- Nøkkeltall fra siste rapport (Ollama), publisert før sluttkurs, høyst 120 dager gammel
+            k = bisect_right(rap_p, grense) - 1
+            if k >= 0 and rap_p[k][:10] >= (date.fromisoformat(d) - timedelta(days=120)).isoformat():
+                for navn, verdi in rap[k][1].items():
+                    if verdi is not None:
+                        f[navn] = float(verdi)
             # --- Innsidere
             a, b = bisect_left(hp, d90), bisect_right(hp, grense)
             vind = handler[a:b]

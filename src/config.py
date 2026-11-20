@@ -100,6 +100,9 @@ INNSIDE_MAKS_LLM_KALL = int(env("INNSIDE_MAKS_LLM_KALL", "15"))
 INNSIDE_LLM = env("INNSIDE_LLM", "anthropic").lower()
 OLLAMA_URL = env("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODELL = env("OLLAMA_MODELL", "qwen2.5:7b")
+# Kontekstvindu for Ollama (tokens). Standard i Ollama er ofte 2–4k, som
+# kutter lange børsmeldinger og rapporter stille.
+OLLAMA_NUM_CTX = int(env("OLLAMA_NUM_CTX", "8192"))
 # Telegram-varsel for innsidesignaler er av som standard: i papirhandelsfasen
 # skal signalene logges og måles før de varsler.
 INNSIDE_VARSLE = env("INNSIDE_VARSLE", "0") == "1"
