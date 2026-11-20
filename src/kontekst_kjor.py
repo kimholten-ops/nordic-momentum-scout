@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse
 
 from src import db
-from src.sources import kontekst
+from src.sources import euronext, kontekst
 from src.universe import last_universe
 
 
@@ -24,6 +24,7 @@ def main() -> int:
         for navn, jobb in [
             ("mfn", lambda: kontekst.hent_mfn(con, fra=a.mfn_fra)),
             ("short", lambda: kontekst.hent_short(con)),
+            ("euronext", lambda: euronext.kjor(con)),  # etter mfn: trenger ISIN
             ("info", (lambda: {"hoppet over": True}) if a.uten_info else
              (lambda: kontekst.hent_info(con, maks=a.info_maks or None))),
         ]:
@@ -41,7 +42,7 @@ def main() -> int:
         ).fetchone()
         print(f"Dekning: {dekning[0]} selskapshendelser i {dekning[1]} selskaper, {dekning[2]} shortrader, "
               f"{dekning[3]} selskaper med Yahoo-info")
-    return 1 if len(feil) == 3 else 0
+    return 1 if len(feil) == 4 else 0
 
 
 if __name__ == "__main__":

@@ -227,7 +227,7 @@ kid,Kid,KID,KID.OL,Oslo Børs,1
 kmc-properties,KMC Properties,KMCP,KMCP.OL,Oslo Børs,1
 kongsberg-automotive,Kongsberg Automotive,KOA,KOA.OL,Oslo Børs,1
 lamor,Lamor,LAMOR,LAMOR.HE,Nasdaq Helsinki,1
-lassila-and-tikanoja,Lassila & Tikanoja,LAT1V,LAT1V.HE,Nasdaq Helsinki,1
+lassila-and-tikanoja,Lassila & Tikanoja,LASTIK,LASTIK.HE,Nasdaq Helsinki,1
 lassila-and-tikanoja-2,Lassila & Tikanoja,LASTIK,LASTIK.HE,Nasdaq Helsinki,1
 lea-bank,Lea Bank,LEA,LEA.OL,Euronext Expand Oslo,1
 lemonsoft,Lemonsoft,LEMON,LEMON.HE,First North Helsinki,1
@@ -300,7 +300,7 @@ shelf-drilling,Shelf Drilling,SHLF,SHLF.OL,Oslo Børs,1
 siem-offshore,Siem Offshore,SIOFF,SIOFF.OL,Oslo Børs,1
 siili-solutions,Siili Solutions,SIILI,SIILI.HE,Nasdaq Helsinki,1
 solstad-offshore,Solstad Offshore,SOFF,SOFF.OL,Oslo Børs,1
-sparebank-1-sr-bank,SpareBank 1 SR-Bank,SRBNK,SRBNK.OL,Oslo Børs,1
+sparebank-1-sr-bank,SpareBank 1 Sør-Norge,SB1NO,SB1NO.OL,Oslo Børs,1
 spinnova,Spinnova,SPINN,SPINN.HE,First North Helsinki,1
 spir-group,Spir Group,SPIR,SPIR.OL,Oslo Børs,1
 spotlio,Spotlio,SPOT,SPOT.OL,Euronext Expand Oslo,1
@@ -310,7 +310,7 @@ stolt-nielsen,Stolt-Nielsen,SNI,SNI.OL,Oslo Børs,1
 strongpoint,StrongPoint,STRO,STRO.OL,Oslo Børs,1
 suominen,Suominen,SUY1V,SUY1V.HE,Nasdaq Helsinki,1
 talenom,Talenom,TNOM,TNOM.HE,Nasdaq Helsinki,1
-techstep,Techstep,TECHo,TECHo.OL,Oslo Børs,1
+techstep,Techstep,TECH,TECH.OL,Oslo Børs,1
 tekna-holding,Tekna Holding,TEKNA,TEKNA.OL,Oslo Børs,1
 tgs,TGS,TGS,TGS.OL,Oslo Børs,1
 thor-medical,Thor Medical,TRMED,TRMED.OL,Oslo Børs,1
@@ -438,9 +438,9 @@ sparebank-1-sorost-norge,SpareBank 1 Sørøst-Norge,SOON,SOON.OL,Oslo Børs,1
 sparebanken-more,Sparebanken Møre,MORG,MORG.OL,Oslo Børs,1
 sparebanken-ost,Sparebanken Øst,SPOG,SPOG.OL,Oslo Børs,1
 sparebanken-sor,Sparebanken Sør,SOR,SOR.OL,Oslo Børs,1
-sparebanken-vest,Sparebanken Vest,SVEG,SVEG.OL,Oslo Børs,1
+sparebanken-vest,Sparebanken Norge,SBNOR,SBNOR.OL,Oslo Børs,1
 svitzer-group,Svitzer Group,SVITZR,SVITZR.CO,København,1
-sydbank,Sydbank,SYDB,SYDB.CO,København,1
+sydbank,AL Sydbank,ALSYDB,ALSYDB.CO,København,1
 tietoevry,Tietoevry,TIETOS,TIETOS.ST,Stockholm,1
 totens-sparebank,Totens Sparebank,TOTG,TOTG.OL,Oslo Børs,1
 tryg,Tryg,TRYG,TRYG.CO,København,1
