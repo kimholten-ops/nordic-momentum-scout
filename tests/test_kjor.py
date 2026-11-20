@@ -63,7 +63,7 @@ def test_rutine_hopper_over_llm_helt(con, monkeypatch):
 
     monkeypatch.setattr(llm, "klassifiser", skal_ikke_kalles)
 
-    resultat = kjor.kjor(con)
+    resultat = kjor.kjor(con, frisk_timer=None)
     assert resultat["filtrert"] == 1
     assert resultat["llm_kall"] == 0
 
@@ -85,7 +85,7 @@ def test_ekte_hendelse_klassifiseres_og_lagres(con, monkeypatch):
         llm.requests, "post", lambda *a, **kw: _FalskSvar(GYLDIG_RESULTAT)
     )
 
-    resultat = kjor.kjor(con)
+    resultat = kjor.kjor(con, frisk_timer=None)
     assert resultat["llm_kall"] == 1
     assert resultat["feilet"] == 0
 
@@ -113,7 +113,7 @@ def test_klassifisering_feilet_stopper_ikke_jobben(con, monkeypatch):
 
     monkeypatch.setattr(llm, "klassifiser", feiler_alltid)
 
-    resultat = kjor.kjor(con)
+    resultat = kjor.kjor(con, frisk_timer=None)
     assert resultat["feilet"] == 1
 
     rad = con.execute("SELECT * FROM klassifiseringer").fetchone()
@@ -135,8 +135,8 @@ def test_samme_promptversjon_klassifiseres_ikke_pa_nytt(con, monkeypatch):
         lambda *a, **kw: (kall.append(1), _FalskSvar(GYLDIG_RESULTAT))[1],
     )
 
-    kjor.kjor(con)
-    kjor.kjor(con)  # ny kjøring, samme PROMPT_VERSJON
+    kjor.kjor(con, frisk_timer=None)
+    kjor.kjor(con, frisk_timer=None)  # ny kjøring, samme PROMPT_VERSJON
 
     assert len(kall) == 1
     assert con.execute("SELECT COUNT(*) FROM klassifiseringer").fetchone()[0] == 1
@@ -152,12 +152,12 @@ def test_maks_kall_grense_utsetter_resten_til_neste_kjoring(con, monkeypatch):
     monkeypatch.setattr(mfn, "hent_brodtekst", lambda url: "tekst")
     monkeypatch.setattr(llm.requests, "post", lambda *a, **kw: _FalskSvar(GYLDIG_RESULTAT))
 
-    forste = kjor.kjor(con, maks_kall=1)
+    forste = kjor.kjor(con, maks_kall=1, frisk_timer=None)
     assert forste["llm_kall"] == 1
     assert forste["stanset_av_budsjett"] == 2
     assert con.execute("SELECT COUNT(*) FROM klassifiseringer").fetchone()[0] == 1
 
-    andre = kjor.kjor(con, maks_kall=10)
+    andre = kjor.kjor(con, maks_kall=10, frisk_timer=None)
     assert andre["llm_kall"] == 2
     assert con.execute("SELECT COUNT(*) FROM klassifiseringer").fetchone()[0] == 3
 
@@ -189,7 +189,7 @@ def test_ingen_kursdata_havner_i_llm_kallet(con, monkeypatch):
 
     monkeypatch.setattr(llm.requests, "post", fake_post)
 
-    kjor.kjor(con)
+    kjor.kjor(con, frisk_timer=None)
 
     assert sendte_payloads, "forventet at LLM-en faktisk ble kalt"
     hele_kallet = json.dumps(sendte_payloads)

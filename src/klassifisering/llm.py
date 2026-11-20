@@ -19,7 +19,10 @@ from src.config import (
     ANTHROPIC_API_KEY,
     ANTHROPIC_API_URL,
     ANTHROPIC_TIMEOUT,
+    KLASSIFISERING_LLM,
     KLASSIFISERING_MODELL,
+    OLLAMA_MODELL,
+    OLLAMA_URL,
 )
 from src.klassifisering.kategorier import KATEGORIER, KATEGORI_BESKRIVELSE, RETNINGER
 
@@ -48,6 +51,40 @@ SYSTEM_PROMPT = (
 
 class KlassifiseringsFeil(Exception):
     """Kastes når modellen ikke gir et gyldig svar etter MAKS_FORSOK forsøk."""
+
+
+class APIStengt(Exception):
+    """API-et tar ikke imot kall nå (tom kreditt, ugyldig nøkkel, struping).
+    Ikke en feil ved meldingen: orkestratoren skal stoppe LLM-kallene for
+    resten av kjøringen og IKKE merke meldingen som feilet."""
+
+
+_STENGT_ORD = ("credit balance", "billing", "insufficient", "quota", "disabled", "rate limit", "overloaded")
+
+
+def sjekk_svar(r: requests.Response) -> None:
+    """Som raise_for_status, men skiller «API-et er stengt for oss» fra vanlige feil."""
+    kode, tekst = getattr(r, "status_code", 200), str(getattr(r, "text", "") or "")
+    if kode in (401, 402, 403, 429, 529) or (kode == 400 and any(o in tekst.lower() for o in _STENGT_ORD)):
+        raise APIStengt(f"HTTP {kode}: {tekst[:200]}")
+    r.raise_for_status()
+
+
+def _kall_ollama(prompt: str, system: str) -> str:
+    r = requests.post(
+        f"{OLLAMA_URL.rstrip('/')}/api/chat",
+        json={"model": OLLAMA_MODELL, "stream": False, "format": "json", "options": {"temperature": 0},
+              "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}]},
+        timeout=300,
+    )
+    r.raise_for_status()
+    return r.json().get("message", {}).get("content", "")
+
+
+def tilgjengelig() -> bool:
+    if KLASSIFISERING_LLM == "ollama":
+        return True
+    return KLASSIFISERING_LLM == "anthropic" and bool(ANTHROPIC_API_KEY)
 
 
 def bygg_prompt(tittel: str, brodtekst: str, publisert: str) -> str:
@@ -110,6 +147,8 @@ def _valider(data: dict) -> dict:
 
 
 def _kall_api(prompt: str, modell: str) -> str:
+    if KLASSIFISERING_LLM == "ollama":
+        return _kall_ollama(prompt, SYSTEM_PROMPT)
     if not ANTHROPIC_API_KEY:
         raise KlassifiseringsFeil("ANTHROPIC_API_KEY er ikke satt")
 
@@ -128,7 +167,7 @@ def _kall_api(prompt: str, modell: str) -> str:
         },
         timeout=ANTHROPIC_TIMEOUT,
     )
-    r.raise_for_status()
+    sjekk_svar(r)
     data = r.json()
     return "".join(
         blokk.get("text", "") for blokk in data.get("content", []) if blokk.get("type") == "text"

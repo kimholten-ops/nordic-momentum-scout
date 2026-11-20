@@ -126,7 +126,7 @@ def kjor(
 
         dedup_resultat = bygg_hendelser(con)
         con.commit()
-        klass_resultat = kjor_klassifisering.kjor(con, maks_kall=maks_kall)
+        klass_resultat = kjor_klassifisering.kjor(con, maks_kall=maks_kall, frisk_timer=None)
 
         detalj = (
             f"arkiv: {sider_totalt} sider, {nye_totalt} nye nyheter. "

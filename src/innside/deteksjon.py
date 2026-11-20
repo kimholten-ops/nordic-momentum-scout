@@ -30,3 +30,13 @@ def er_innsidemelding(tittel: str) -> bool:
 
 def er_korreksjon(tittel: str) -> bool:
     return bool(_KORREKSJON_RE.search(tittel or ""))
+
+
+# Titler som åpenbart er tildeling, spareprogram, emisjon, opsjoner, lån o.l.
+# Slike meldinger gir aldri et kjøpssignal og sendes ikke til KI.
+STOY = re.compile(
+    r"tildel|allocat|allot|grant|award|share\s*(?:saving|purchase|incentive|option)\s*program|aksjespar|aktiespar|"
+    r"incentive|\bLTI\b|\bRSU|\bPSU|subscri|tegning|emisjon|private\s+placement|rights\s+issue|bonus|option|warrant|"
+    r"buy-?back|tilbakekjøp|egne\s+aksjer|own\s+shares|lending|aksjelån|pledge|pant|savings|spareprogram|vesting|exercise",
+    re.IGNORECASE,
+)

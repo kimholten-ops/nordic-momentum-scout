@@ -61,7 +61,7 @@ def test_rapport_viser_kategorifordeling_og_siste_klassifiseringer(con, monkeypa
     monkeypatch.setattr(llm, "ANTHROPIC_API_KEY", "test-nokkel")
     monkeypatch.setattr(mfn, "hent_brodtekst", lambda url: "tekst")
     monkeypatch.setattr(llm.requests, "post", lambda *a, **kw: _FalskSvar())
-    kjor.kjor(con)
+    kjor.kjor(con, frisk_timer=None)
     con.commit()
 
     tekst = report.bygg()

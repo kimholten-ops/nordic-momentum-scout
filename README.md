@@ -67,14 +67,23 @@ Meldingene tolkes med regler, uten KI-kostnad:
 
 Det reglene ikke klarer, merkes «trenger_llm». Velg selv hvem som tolker resten
 (`INNSIDE_LLM`): `anthropic` (Haiku, ca. 2–3 øre per melding), `ollama`
-(lokal modell, gratis) eller `av`.
+(lokal modell, gratis) eller `av`. Titler som åpenbart er tildeling,
+spareprogram, emisjon o.l. merkes «ingen handler» uten KI.
+
+**Betalt API brukes bare på ferske meldinger.** GitHub Actions sender bare
+meldinger publisert de siste `LLM_FRISK_TIMER` (48) timene til Claude, høyst
+30 børsmeldinger og 15 innsidemeldinger per kjøring. Alt eldre etterslep tas
+av Ollama på PC-en. Svarer API-et at kreditten er tom (eller nøkkelen er
+ugyldig), stopper kallene for den kjøringen uten at noe merkes som feilet,
+og det kommer høyst én Telegram-melding om dagen.
 
 **Ollama på egen PC** (gratis): `ollama pull qwen2.5:7b`, så i repomappen:
 ```powershell
 python -m scripts.ollama_tolk          # kan avbrytes og startes igjen
 ```
-Skriptet skriver til `data/ollama/tolkninger.jsonl` og pusher hver 50.
-tolkning til grenen `ollama-tolkninger` (uten å røre arbeidsmappen eller
+Skriptet tar to køer: innsidemeldinger (`data/ollama/tolkninger.jsonl`) og
+uklassifiserte børsmeldinger (`data/ollama/klassifiseringer.jsonl`,
+`--bare nyheter` for bare den). Det pusher hver 50. tolkning til grenen `ollama-tolkninger` (uten å røre arbeidsmappen eller
 databasen lokalt). Workflowen **Importer Ollama-tolkninger** henter dem
 derfra annenhver time og legger dem inn i databasen.
 Regn med 5–30 sekunder per melding avhengig av maskinen.

@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from src.config import INNSIDE_MAKS_LLM_KALL, TZ
+from src.config import INNSIDE_MAKS_LLM_KALL, LLM_FRISK_TIMER, TZ
 from src.innside import llm
-from src.innside.deteksjon import er_innsidemelding, er_korreksjon
+from src.innside.deteksjon import STOY, er_innsidemelding, er_korreksjon
 from src.innside.fritekst import parse_fritekst
 from src.innside.parser import Handel, parse_strukturert
 from src.klassifisering.llm import KlassifiseringsFeil
@@ -28,21 +28,27 @@ def noekkel(slug: str, h: Handel) -> str:
     )
 
 
-def _ubehandlede(con: sqlite3.Connection, med_venter: bool = True) -> list[sqlite3.Row]:
+def _ubehandlede(con: sqlite3.Connection, med_venter: bool = True, venter_fra: str = "") -> list[sqlite3.Row]:
     """Innsidemeldinger som ikke er ferdig behandlet. Uten KI tilgjengelig tas
     de som venter på KI ikke med — ellers ville hver kjøring hentet tusenvis av
     arkivmeldinger fra MFN på nytt bare for å gi opp igjen."""
-    statuser = _FERDIG if med_venter else (*_FERDIG, "trenger_llm")
     ferdige = {
         r[0] for r in con.execute(
-            f"SELECT nyhet_id FROM innside_behandlet WHERE versjon = ? AND status IN ({','.join('?' * len(statuser))})",
-            (EKSTRAKSJON_VERSJON, *statuser),
+            f"SELECT nyhet_id FROM innside_behandlet WHERE versjon = ? AND status IN ({','.join('?' * len(_FERDIG))})",
+            (EKSTRAKSJON_VERSJON, *_FERDIG),
+        )
+    }
+    venter = {
+        r[0] for r in con.execute(
+            "SELECT nyhet_id FROM innside_behandlet WHERE versjon = ? AND status = 'trenger_llm'", (EKSTRAKSJON_VERSJON,)
         )
     }
     rader = con.execute(
         "SELECT id, url, publisert, selskap_slug, tittel, brodtekst FROM nyheter ORDER BY publisert, id"
     ).fetchall()
-    return [r for r in rader if r["id"] not in ferdige and er_innsidemelding(r["tittel"])]
+    # Ventende tas med bare når KI er tilgjengelig, og bare de ferske (eldre: Ollama på PC-en).
+    return [r for r in rader if r["id"] not in ferdige and er_innsidemelding(r["tittel"])
+            and (r["id"] not in venter or (med_venter and (r["publisert"] or "") >= venter_fra))]
 
 
 def _marker(con, nyhet_id: int, status: str, detalj: str, na: str) -> None:
@@ -99,12 +105,17 @@ def tolk_med_regler(tekst: str, publisert: str | None) -> tuple[list[Handel] | N
     return None, ""
 
 
-def kjor(con: sqlite3.Connection, maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, hent_tekst=mfn.hent_brodtekst) -> dict:
-    na = datetime.now(TZ).isoformat(timespec="seconds")
-    res = {"vurdert": 0, "regel": 0, "llm": 0, "ingen_handler": 0, "trenger_llm": 0, "feilet": 0, "brodtekst_feilet": 0}
+def kjor(con: sqlite3.Connection, maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, hent_tekst=mfn.hent_brodtekst,
+         frisk_timer: float | None = LLM_FRISK_TIMER) -> dict:
+    """Regler først; LLM bare for meldinger yngre enn frisk_timer (None = alle). Eldre meldinger blir «trenger_llm» og tolkes av Ollama på PC-en."""
+    na_dt = datetime.now(TZ)
+    na = na_dt.isoformat(timespec="seconds")
+    grense = (na_dt - timedelta(hours=frisk_timer)).replace(tzinfo=None).isoformat() if frisk_timer else ""
+    res = {"vurdert": 0, "regel": 0, "llm": 0, "ingen_handler": 0, "trenger_llm": 0, "feilet": 0,
+           "brodtekst_feilet": 0, "stoy": 0, "api_stengt": None}
 
     ki = llm.tilgjengelig() and maks_llm_kall > 0
-    for n in _ubehandlede(con, med_venter=ki):
+    for n in _ubehandlede(con, med_venter=ki, venter_fra=grense):  # kronologisk: korreksjoner etter originalen
         res["vurdert"] += 1
         tekst = n["brodtekst"]
         if not tekst:
@@ -121,9 +132,17 @@ def kjor(con: sqlite3.Connection, maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, he
 
         korr = er_korreksjon(n["tittel"])
         handler, kilde = tolk_med_regler(tekst or "", n["publisert"])
+        if handler is None and STOY.search(n["tittel"] or ""):
+            # Tildeling, spareprogram, emisjon, opsjoner o.l.: gir aldri kjøpssignal.
+            con.execute("DELETE FROM innsidehandler WHERE nyhet_id = ?", (n["id"],))
+            _marker(con, n["id"], "ingen_handler", "støytittel (ikke tolket)", na)
+            res["ingen_handler"] += 1
+            res["stoy"] += 1
+            con.commit()
+            continue
         if handler is None:
-            if res["llm"] >= maks_llm_kall or not ki:
-                _marker(con, n["id"], "trenger_llm", "ingen LLM-kall tilgjengelig", na)
+            if res["llm"] >= maks_llm_kall or not ki or res["api_stengt"] or (n["publisert"] or "") < grense:
+                _marker(con, n["id"], "trenger_llm", "venter på LLM (Ollama tar eldre)", na)
                 res["trenger_llm"] += 1
                 con.commit()
                 continue
@@ -131,6 +150,13 @@ def kjor(con: sqlite3.Connection, maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, he
             try:
                 handler = llm.trekk_ut(n["tittel"], tekst or "", n["publisert"])
                 kilde = "llm"
+            except llm.APIStengt as e:
+                res["api_stengt"] = str(e)[:200]
+                res["llm"] -= 1
+                _marker(con, n["id"], "trenger_llm", "API stengt", na)
+                res["trenger_llm"] += 1
+                con.commit()
+                continue
             except KlassifiseringsFeil as e:
                 _marker(con, n["id"], "feilet", str(e)[:300], na)
                 res["feilet"] += 1

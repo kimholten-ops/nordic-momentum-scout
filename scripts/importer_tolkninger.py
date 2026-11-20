@@ -20,6 +20,8 @@ from src.marked import suffiks
 from src.universe import last_universe
 
 FIL = ROOT / "data" / "ollama" / "tolkninger.jsonl"
+FIL_KL = ROOT / "data" / "ollama" / "klassifiseringer.jsonl"
+GREN_FILER = {FIL: "data/ollama/tolkninger.jsonl", FIL_KL: "data/ollama/klassifiseringer.jsonl"}
 BORS = {".OL": "Oslo Børs", ".ST": "Stockholm", ".HE": "Helsinki", ".CO": "København"}
 
 
@@ -80,6 +82,53 @@ def kjor(fil=FIL) -> dict:
     return stat
 
 
+def kjor_klassifiseringer(fil=FIL_KL) -> dict:
+    """Børsmeldinger klassifisert av Ollama på PC-en -> klassifiseringer.
+    Erstatter bare manglende eller feilede klassifiseringer."""
+    from src.klassifisering.kategorier import PROMPT_VERSJON
+    from src.klassifisering.llm import _valider
+
+    stat = {"lest": 0, "lagt_inn": 0, "fantes": 0, "feil": 0, "ukjent_url": 0}
+    if not fil.exists():
+        return stat
+    na = datetime.now(TZ).isoformat(timespec="seconds")
+    with db.session() as con:
+        for linje in fil.read_text(encoding="utf-8").splitlines():
+            if not linje.strip():
+                continue
+            stat["lest"] += 1
+            rad = json.loads(linje)
+            h = con.execute(
+                "SELECT h.id FROM hendelser h JOIN nyheter n ON n.id = h.kanonisk_nyhet_id WHERE n.url = ?", (rad["url"],)
+            ).fetchone()
+            if not h:
+                stat["ukjent_url"] += 1
+                continue
+            finnes = con.execute(
+                "SELECT status FROM klassifiseringer WHERE hendelse_id = ? AND prompt_versjon = ?", (h[0], PROMPT_VERSJON)
+            ).fetchone()
+            if finnes and finnes[0] != "feilet":
+                stat["fantes"] += 1
+                continue
+            try:
+                r = _valider(rad["resultat"])
+            except (KeyError, TypeError, ValueError):
+                stat["feil"] += 1
+                continue
+            con.execute("DELETE FROM klassifiseringer WHERE hendelse_id = ? AND prompt_versjon = ?", (h[0], PROMPT_VERSJON))
+            con.execute(
+                "INSERT INTO klassifiseringer (hendelse_id, prompt_versjon, modell, status, kategori, retning, "
+                " overraskelse, sikkerhet, begrunnelse, tallverdi, valuta, klassifisert_tidspunkt) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (h[0], PROMPT_VERSJON, f"ollama:{rad.get('modell')}", "ok", r["kategori"], r["retning"],
+                 r["overraskelse"], r["sikkerhet"], r["begrunnelse"], r["tallverdi"], r["valuta"], na),
+            )
+            stat["lagt_inn"] += 1
+        con.commit()
+        db.logg(con, "importer_klassifiseringer", "ok", ", ".join(f"{k} {v}" for k, v in stat.items()))
+    return stat
+
+
 def hent_fra_gren() -> None:
     """I GitHub Actions: hent filen fra grenen PC-en pusher til."""
     import subprocess
@@ -89,15 +138,17 @@ def hent_fra_gren() -> None:
     if r.returncode:
         print("Grenen ollama-tolkninger finnes ikke (ennå).")
         return
-    innhold = subprocess.run(["git", "show", "origin/ollama-tolkninger:data/ollama/tolkninger.jsonl"],
-                             cwd=ROOT, capture_output=True, text=True, encoding="utf-8").stdout
-    FIL.parent.mkdir(parents=True, exist_ok=True)
-    FIL.write_text(innhold, encoding="utf-8")
-    print(f"Hentet {len(innhold.splitlines())} tolkninger fra grenen.")
+    for lokal, i_gren in GREN_FILER.items():
+        innhold = subprocess.run(["git", "show", f"origin/ollama-tolkninger:{i_gren}"],
+                                 cwd=ROOT, capture_output=True, text=True, encoding="utf-8").stdout
+        lokal.parent.mkdir(parents=True, exist_ok=True)
+        lokal.write_text(innhold, encoding="utf-8")
+        print(f"Hentet {len(innhold.splitlines())} linjer fra {i_gren}.")
 
 
 if __name__ == "__main__":
     if "--fra-gren" in sys.argv:
         hent_fra_gren()
-    print(kjor())
+    print("Innsidehandler:", kjor())
+    print("Klassifiseringer:", kjor_klassifiseringer())
     sys.exit(0)

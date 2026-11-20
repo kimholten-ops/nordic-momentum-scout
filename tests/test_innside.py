@@ -155,23 +155,23 @@ def test_kjor_regel_fritekst_og_llm_og_ingen_dobbeltbehandling(con, monkeypatch)
     kall = []
     monkeypatch.setattr(llm.requests, "post", lambda *a, **k: kall.append(1) or _Svar(ELOPAK_SVAR))
 
-    r = ekstraksjon.kjor(con)
+    r = ekstraksjon.kjor(con, frisk_timer=None)
     assert (r["vurdert"], r["regel"], r["llm"]) == (3, 2, 1)   # Kesko (skjema) + Elopak (fritekst) uten KI
     kilder = dict(con.execute("SELECT selskap_slug, MAX(kilde) FROM innsidehandler GROUP BY selskap_slug").fetchall())
     assert kilder == {"kesko": "regel", "elopak": "fritekst", "abc": "llm"}
     assert len(kall) == 1
-    assert ekstraksjon.kjor(con)["vurdert"] == 0  # andre kjøring gjør ingenting
+    assert ekstraksjon.kjor(con, frisk_timer=None)["vurdert"] == 0  # andre kjøring gjør ingenting
 
 
 def test_uten_ki_venter_meldingen_og_hentes_ikke_paa_nytt(con, monkeypatch):
     _nyhet(con, "abc", "ABC: Mandatory notification of trade", "2026-11-10T17:00:00", UKJENT_FORMAT)
     monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
-    assert ekstraksjon.kjor(con)["trenger_llm"] == 1
-    assert ekstraksjon.kjor(con)["vurdert"] == 0       # venter, ingen ny henting
+    assert ekstraksjon.kjor(con, frisk_timer=None)["trenger_llm"] == 1
+    assert ekstraksjon.kjor(con, frisk_timer=None)["vurdert"] == 0       # venter, ingen ny henting
     monkeypatch.setattr(llm, "tilgjengelig", lambda: True)
     monkeypatch.setattr(llm, "ANTHROPIC_API_KEY", "x")
     monkeypatch.setattr(llm.requests, "post", lambda *a, **k: _Svar(ELOPAK_SVAR))
-    assert ekstraksjon.kjor(con)["llm"] == 1           # tas opp når KI er tilgjengelig
+    assert ekstraksjon.kjor(con, frisk_timer=None)["llm"] == 1           # tas opp når KI er tilgjengelig
 
 
 def test_ollama_brukes_naar_valgt(monkeypatch):
@@ -198,7 +198,7 @@ def test_korreksjon_erstatter_original_og_duplikat_telles_en_gang(con, monkeypat
     _nyhet(con, "multiconsult", "Mandatory notification of trade - primary insider", "2026-11-18T13:14:42", t1, "u1")
     _nyhet(con, "multiconsult", "Mandatory notification of trade - primary insider", "2026-11-18T13:14:59", t1, "u2")  # annen distributør
     _nyhet(con, "multiconsult", "Correction: Mandatory notification of trade - primary insider", "2026-11-18T13:26:44", t2, "u3")
-    ekstraksjon.kjor(con)
+    ekstraksjon.kjor(con, frisk_timer=None)
     gyldige = con.execute("SELECT antall FROM innsidehandler WHERE gyldig = 1").fetchall()
     assert [r["antall"] for r in gyldige] == [2000]
 
@@ -210,7 +210,7 @@ def test_signal_ceo_kjop_over_terskel_og_salg_ignoreres(con, monkeypatch):
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00", _kjop_tekst("Per Hansen", "CEO", 20000, 50, "2026-11-09"))
     salg = _kjop_tekst("Kari Nord", "CFO", 90000, 50, "2026-11-09").replace("ACQUISITION", "DISPOSAL")
     _nyhet(con, "xyz", "Mandatory notification of trade", "2026-11-10T09:05:00", salg)
-    ekstraksjon.kjor(con)
+    ekstraksjon.kjor(con, frisk_timer=None)
     assert signal.bygg_signaler(con) == 1
     s = con.execute("SELECT * FROM innside_signaler").fetchone()
     assert s["selskap_slug"] == "abc" and s["score"] >= signal.TERSKEL and s["antall_personer"] == 1
@@ -221,7 +221,7 @@ def test_signal_klynge_og_ikke_varsle_samme_score_to_ganger(con, monkeypatch):
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00", _kjop_tekst("A", "Member of the Board", 2000, 50, "2026-11-09"))
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-12T09:00:00", _kjop_tekst("B", "Member of the Board", 3000, 50, "2026-11-11"))
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-13T09:00:00", _kjop_tekst("C", "Member of the Board", 2000, 50, "2026-11-12"))
-    ekstraksjon.kjor(con)
+    ekstraksjon.kjor(con, frisk_timer=None)
     signal.bygg_signaler(con)
     ny = signal.ikke_varslede(con)
     assert ny, "klynge på tre styremedlemmer skal gi minst ett signal"
@@ -273,7 +273,7 @@ def test_backtest_kjor_rapporterer_manglende_kurs(con, monkeypatch):
     from src import innside_backtest as bt
     monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00", _kjop_tekst("Per", "CEO", 20000, 50, "2026-11-09"))
-    ekstraksjon.kjor(con)
+    ekstraksjon.kjor(con, frisk_timer=None)
     r = bt.kjor(con)
     assert r["kjop_totalt"] == 1 and r["uten_kursdata"] == 1
 
@@ -296,7 +296,7 @@ def test_dashboard_eksport_en_signalrad_per_selskap_og_dag(con, monkeypatch):
     monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     for i, p in enumerate(["A", "B", "C"]):
         _nyhet(con, "abc", "Mandatory notification of trade", f"2026-11-10T09:0{i}:00", _kjop_tekst(p, "CEO", 20000, 50, "2026-11-09"), f"u{i}")
-    ekstraksjon.kjor(con)
+    ekstraksjon.kjor(con, frisk_timer=None)
     assert signal.bygg_signaler(con) == 3
     d = ed.bygg(con)
     assert len(d["signaler"]) == 1 and d["tall"]["signaler"] == 3
@@ -307,7 +307,7 @@ def test_varsel_escaper_html_i_navn(con, monkeypatch):
     monkeypatch.setattr(llm, "tilgjengelig", lambda: False)
     _nyhet(con, "abc", "Mandatory notification of trade", "2026-11-10T09:00:00",
            _kjop_tekst("Smith & <Co> AS", "CEO", 20000, 50, "2026-11-09"))
-    ekstraksjon.kjor(con)
+    ekstraksjon.kjor(con, frisk_timer=None)
     signal.bygg_signaler(con)
     s = con.execute("SELECT * FROM innside_signaler").fetchone()
     tekst = signal.formater_varsel(con, s)

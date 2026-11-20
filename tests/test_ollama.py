@@ -92,6 +92,7 @@ def test_push_til_egen_gren_rorer_ikke_arbeidsmappen(tmp_path, monkeypatch):
     ut.parent.mkdir(parents=True)
     monkeypatch.setattr(ollama_tolk, "ROOT", lokal)
     monkeypatch.setattr(ollama_tolk, "UT", ut)
+    monkeypatch.setattr(ollama_tolk, "UT_KL", ut.parent / "klassifiseringer.jsonl")  # finnes ikke: hoppes over
     ut.write_text('{"url": "u1"}\n', encoding="utf-8")
     (lokal / "db.sqlite").write_text("endret lokalt")       # skal ikke pushes eller røres
     ollama_tolk.push(1)

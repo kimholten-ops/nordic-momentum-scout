@@ -68,7 +68,14 @@ ANTHROPIC_TIMEOUT = 30
 KLASSIFISERING_MODELL = env("KLASSIFISERING_MODELL", "claude-haiku-4-5-20251001")
 # Sikkerhetsnett mot en feed-eksplosjon som stille koster hundrevis av
 # kroner: maks antall LLM-kall i én kjøring av src.klassifiser.
-KLASSIFISERING_MAKS_KALL = int(env("KLASSIFISERING_MAKS_KALL", "200"))
+KLASSIFISERING_MAKS_KALL = int(env("KLASSIFISERING_MAKS_KALL", "30"))
+# «anthropic» (Claude Haiku), «ollama» (lokal modell, brukes av scripts/ollama_tolk.py) eller «av».
+KLASSIFISERING_LLM = env("KLASSIFISERING_LLM", "anthropic").lower()
+# Bare meldinger yngre enn dette sendes til betalt API fra GitHub Actions.
+# Eldre etterslep (arkiv, ting som ble liggende) tolkes gratis av Ollama på
+# PC-en. Nov. 2026: jobben gikk fra 2 til 60 kjøringer om dagen, og hver
+# kjøring brukte 200 kall på gammelt etterslep — det tømte API-kontoen.
+LLM_FRISK_TIMER = float(env("LLM_FRISK_TIMER", "48"))
 
 # --- Arkivimport (fase 1, src/backfill_arkiv.py) ---------------------------
 # MFN dokumenterer ikke arkiv-/pagineringsformatet sitt. Dette er et
@@ -85,7 +92,7 @@ INNSIDE_FX_NOK = {
     "NOK": 1.0, "SEK": float(env("FX_SEK", "1.05")), "DKK": float(env("FX_DKK", "1.55")),
     "EUR": float(env("FX_EUR", "11.7")), "USD": float(env("FX_USD", "10.0")),
 }
-INNSIDE_MAKS_LLM_KALL = int(env("INNSIDE_MAKS_LLM_KALL", "40"))
+INNSIDE_MAKS_LLM_KALL = int(env("INNSIDE_MAKS_LLM_KALL", "15"))
 # Hvem tolker meldinger regelparserne ikke klarer:
 #   "anthropic" — Claude Haiku via API (koster litt, krever ANTHROPIC_API_KEY)
 #   "ollama"    — lokal modell på egen PC (gratis), se README «Ollama»
