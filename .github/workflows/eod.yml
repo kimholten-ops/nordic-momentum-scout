@@ -43,6 +43,7 @@ jobs:
         run: python -m src.kontekst_kjor
 
       - name: Faktormodell (aksjescore Norden + USA)
+        continue-on-error: true  # en feil her skal ikke stoppe hjernen eller lagringen
         run: python -m src.panel_kjor
 
       - name: Hjerne (lær, simuler, foreslå, varsle)

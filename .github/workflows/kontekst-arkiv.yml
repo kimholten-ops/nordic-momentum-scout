@@ -45,6 +45,7 @@ jobs:
         if: inputs.kurser
         run: python -m scripts.hent_kurshistorikk --dager 1600
       - name: Faktormodell (aksjescore Norden + USA)
+        continue-on-error: true  # en feil her skal ikke stoppe hjernen eller lagringen
         run: python -m src.panel_kjor
       - name: Hjerne (walk-forward, uten varsel)
         run: python -m src.hjerne_kjor --ikke-varsle
