@@ -139,3 +139,29 @@ def test_avslaatte_egenskaper_brukes_ikke_av_modellen():
                  {"kontekst.emisjon90": "ja", "selskap.sektor": "energi", "kurs.likviditet": "høy"})
     eg = _egenskaper(h)
     assert eg["kontekst.emisjon90"] == "ja" and "selskap.sektor" not in eg and eg["kurs.likviditet"] == "høy"
+
+
+def test_euronext_parse_og_rens():
+    from src.sources import euronext
+
+    csv = ('﻿"Historical Data"\n"From x"\nNO1\nDate;Open;High;Low;Last;Close;"Number of Shares";"Number of Trades";Turnover;vwap\n'
+           "03/01/2025;0.00;0.00;0.00;0.00;10.0;0;0;0;0\n02/01/2025;9.8;10.1;9.7;10.0;10.0;500;3;5000;10\n")
+    r = euronext.parse_csv(csv)
+    assert r[0] == ("2025-01-02", 9.8, 10.1, 9.7, 10.0, 500) and r[1][1] is None and r[1][5] == 0
+    serie = [("d1", 0, 0, 0, 10.0, 0), ("d2", 0, 0, 0, 0.05, 0), ("d3", 0, 0, 0, 10.2, 0),
+             ("d4", 0, 0, 0, 25.0, 0), ("d5", 0, 0, 0, 10.1, 0), ("d6", 0, 0, 0, 16.0, 0), ("d7", 0, 0, 0, 16.5, 0)]
+    assert [x[0] for x in euronext.rens(serie)] == ["d1", "d3", "d5", "d6", "d7"]  # ekte hopp (d6) beholdes
+
+
+def test_euronext_fyller_bare_bakover_naar_kursene_stemmer(tmp_path):
+    from src.sources import euronext
+
+    p = tmp_path / "e.db"
+    db.init(p)
+    con = db.connect(p)
+    con.execute("INSERT INTO kurser (yahoo,dato,close) VALUES ('X.OL','2025-01-03',10.0)")
+    rader = [("2025-01-02", None, None, None, 9.9, 1), ("2025-01-03", None, None, None, 10.1, 1)]
+    assert euronext.fyll(con, "X.OL", rader) == ("fylt bakover", 1)
+    con.execute("INSERT INTO kurser (yahoo,dato,close) VALUES ('Y.OL','2025-01-03',5.0)")
+    assert euronext.fyll(con, "Y.OL", rader) == ("avvik ved overgang", 0)
+    assert euronext.fyll(con, "Z.OL", rader) == ("hele serien", 2)
