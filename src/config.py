@@ -106,12 +106,14 @@ INNSIDE_VARSLE = env("INNSIDE_VARSLE", "0") == "1"
 
 # --- Markedsindekser (meravkastning) -----------------------------------------
 # Børssuffiks -> Yahoo-indeks. Brukes til å trekke markedet fra avkastningen.
-INDEKSER = {".OL": "OSEBX.OL", ".ST": "^OMXSPI", ".HE": "^OMXH25", ".CO": "^OMXC25"}
+# «.US» er ikke et Yahoo-suffiks: amerikanske symboler har ingen endelse
+# (SOFI, ASTS). marked.suffiks gir «.US» for dem; universe/usa.csv lister dem.
+INDEKSER = {".OL": "OSEBX.OL", ".ST": "^OMXSPI", ".HE": "^OMXH25", ".CO": "^OMXC25", ".US": "^GSPC"}
 # OSEBX er en totalavkastningsindeks (utbytte reinvestert); de andre er
 # prisindekser. Aksjene får utbytte lagt til (kurser.utbytte), så
 # prisindeksene får et anslått årlig direkteavkastningstillegg for at
 # meravkastningen skal sammenligne likt med likt.
-INDEKS_UTBYTTE_AAR = {".OL": 0.0, ".ST": 0.03, ".HE": 0.04, ".CO": 0.02}
+INDEKS_UTBYTTE_AAR = {".OL": 0.0, ".ST": 0.03, ".HE": 0.04, ".CO": 0.02, ".US": 0.013}
 KURSHISTORIKK_DAGER = int(env("KURSHISTORIKK_DAGER", "1600"))  # fra ca. 2022: arkivet + 52 ukers bakblikk
 
 # --- Handelskostnader (backtest og papirhandel) -------------------------------
@@ -163,6 +165,11 @@ HJERNE_EGENSKAPER_AV = [x for x in env(
     "HJERNE_EGENSKAPER_AV",
     "kontekst.rapport,kontekst.tilbakekjøp90,kurs.short,kurs.volatilitet,kurs.relstyrke20,selskap.sektor,kurs.størrelse",
 ).split(",") if x]
+
+# Faktormodellen (src/panel/): kandidater i Norden med aksjescore i nederste
+# tredjedel filtreres bort. Test 2024–26: innsidekjøp i svakeste tredjedel
+# ga -2,5 % mot børsen på 20 d, sterkeste tredjedel -0,1 %.
+PANEL_FILTER_PERSENTIL = float(env("PANEL_FILTER_PERSENTIL", "0.333"))
 
 # Regelsjekk (enkel, gjennomsiktig strategi ved siden av modellen): likvid,
 # ingen advarsel og minst ett plusstegn. Lister fra analysen av 2023–24,

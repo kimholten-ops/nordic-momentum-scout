@@ -24,7 +24,21 @@ def _symboler(con: sqlite3.Connection) -> list[str]:
             "SELECT DISTINCT yahoo FROM selskaper WHERE aktiv=1 AND yahoo IS NOT NULL AND yahoo<>''"
         )
     ]
-    return aksjer + [i for i in INDEKSER.values() if i not in aksjer]
+    usa = [u for u in usa_symboler() if u not in aksjer]
+    return aksjer + usa + [i for i in INDEKSER.values() if i not in aksjer]
+
+
+def usa_symboler() -> list[str]:
+    """Amerikanske aksjer til faktormodellen (universe/usa.csv)."""
+    import csv
+
+    from src.config import ROOT
+
+    fil = ROOT / "universe" / "usa.csv"
+    if not fil.exists():
+        return []
+    with fil.open(encoding="utf-8") as f:
+        return [r["symbol"] for r in csv.DictReader(f) if r.get("symbol")]
 
 
 def _last_ned(con: sqlite3.Connection, symboler: list[str], start: str) -> int:

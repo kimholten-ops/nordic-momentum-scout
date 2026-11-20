@@ -44,6 +44,8 @@ jobs:
       - name: Kurshistorikk med utbytte
         if: inputs.kurser
         run: python -m scripts.hent_kurshistorikk --dager 1600
+      - name: Faktormodell (aksjescore Norden + USA)
+        run: python -m src.panel_kjor
       - name: Hjerne (walk-forward, uten varsel)
         run: python -m src.hjerne_kjor --ikke-varsle
       - name: Lagre databasen (release «data-siste»)

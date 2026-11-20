@@ -42,6 +42,9 @@ jobs:
           MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
         run: python -m src.kontekst_kjor
 
+      - name: Faktormodell (aksjescore Norden + USA)
+        run: python -m src.panel_kjor
+
       - name: Hjerne (lær, simuler, foreslå, varsle)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}

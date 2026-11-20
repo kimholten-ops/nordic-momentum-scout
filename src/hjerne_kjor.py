@@ -134,7 +134,13 @@ def kjor(varsle_nye: bool = HJERNE_VARSLE) -> dict:
             for r in con.execute("SELECT selskap_slug, publisert, MAX(score) AS score FROM innside_signaler "
                                  "GROUP BY selskap_slug, substr(publisert, 1, 10)")
         }
-        kandidater = kand.ranger(hendelser, kurser, res.modell, res_lang.modell, p, p_lang, regel) if res.modell and res_lang.modell else []
+        panel = {}
+        if con.execute("SELECT name FROM sqlite_master WHERE name = 'panel_score'").fetchone():
+            panel = {r["yahoo"]: {"persentil": r["persentil"], "tidel": r["tidel"], "region": r["region"],
+                                  "forventet_mer": r["forventet_mer"], "bidrag": json.loads(r["bidrag"] or "{}")}
+                     for r in con.execute("SELECT * FROM panel_score")}
+        kandidater = (kand.ranger(hendelser, kurser, res.modell, res_lang.modell, p, p_lang, regel, panel)
+                      if res.modell and res_lang.modell else [])
         ekstra = {
             "kandidater": kandidater,
             "kvalitet": {

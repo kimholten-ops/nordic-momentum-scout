@@ -88,6 +88,28 @@ databasen lokalt). Workflowen **Importer Ollama-tolkninger** henter dem
 derfra annenhver time og legger dem inn i databasen.
 Regn med 5–30 sekunder per melding avhengig av maskinen.
 
+## Faktormodellen / aksjescore (src/panel/)
+
+Gir hver aksje (Norden + ca. 500 amerikanske i `universe/usa.csv`) en score
+hver uke. Ett panel med én rad per aksje per uke (~140 000 rader) og
+egenskaper kjent ved sluttkurs: momentum (12, 6, 1 mnd, 1 uke), avstand til
+52-ukers topp/bunn, volatilitet, likviditet, volum, 200-dagers snitt, styrke
+mot børsen, børsens trend, utbytte, børsverdi, sektor, reaksjon og volum på
+siste kvartalsrapport, emisjon/tilbakekjøp, innsidekjøp og short. Mål: 20
+handelsdagers meravkastning mot børsen (kjøp på åpning neste dag).
+
+- LightGBM, én modell per region, lærer å rangere aksjene mot hverandre.
+- Testet kvartalsvis walk-forward fra juli 2024 (bare rader med kjent fasit
+  før testkvartalet). Rang-IC og avkastning per tidel vises i fanen
+  «Aksjescore»; «forventet 20 d» er tidelens faktiske snitt ut-av-utvalg.
+- Forklaring per aksje: egenskapene som trakk scoren mest opp og ned.
+- Kandidater i Norden med score i nederste tredjedel filtreres bort
+  (`PANEL_FILTER_PERSENTIL`).
+- USA-universet er dagens aksjer (overlevelsesskjevhet): les USA-scoren med
+  skepsis. Oppdater listen med `python -m scripts.oppdater_usa`.
+
+Kjøres i «Kurser og rapport» (`python -m src.panel_kjor`, under ett minutt).
+
 ## Hjernen (src/hjerne/)
 
 Lærer av utfallet til hver hendelse — innsidekjøp og (når nyhetsklassifiseringen

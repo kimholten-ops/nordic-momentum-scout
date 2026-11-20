@@ -109,6 +109,26 @@ def bygg(con) -> dict:
         if rader:
             r4 = lambda v: round(v, 4) if v is not None else None
             kurser[sym] = {k: [r4(r[k]) if k != "dato" else r[k] for r in rader] for k in ("dato", "open", "high", "low", "close")}
+    panel = {"status": {}, "score": []}
+    if con.execute("SELECT name FROM sqlite_master WHERE name = 'panel_score'").fetchone():
+        import csv
+
+        usa = {}
+        fil = ROOT / "universe" / "usa.csv"
+        if fil.exists():
+            with fil.open(encoding="utf-8") as fh:
+                usa = {r["symbol"]: r for r in csv.DictReader(fh)}
+        navn = {r[0]: r[1] for r in con.execute("SELECT yahoo, MIN(navn) FROM selskaper GROUP BY yahoo")}
+        panel["status"] = {r[0]: {"oppdatert": r[1], **json.loads(r[2])} for r in con.execute("SELECT * FROM panel_status")}
+        for st in panel["status"].values():
+            st.pop("egenskaper", None)
+        for r in con.execute("SELECT * FROM panel_score ORDER BY persentil DESC"):
+            u = usa.get(r["yahoo"], {})
+            panel["score"].append({
+                "yahoo": r["yahoo"], "navn": navn.get(r["yahoo"]) or u.get("navn") or r["yahoo"], "region": r["region"],
+                "mine": u.get("mine") == "1", "persentil": round(r["persentil"], 3), "tidel": r["tidel"],
+                "forventet_mer": r["forventet_mer"], "kostnad": r["kostnad"], **json.loads(r["bidrag"] or "{}"),
+            })
     siste_poll = con.execute(
         "SELECT MAX(tidspunkt) FROM kjorelogg WHERE jobb = 'poll_news' AND status = 'ok'"
     ).fetchone()[0]
@@ -126,6 +146,7 @@ def bygg(con) -> dict:
         "siste_poll": siste_poll,
         "webpush_public": env("WEBPUSH_VAPID_PUBLIC", ""),
         "kurser": kurser,
+        "panel": panel,
     }
 
 
