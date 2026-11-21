@@ -64,3 +64,10 @@ def test_r1_lekkasje_og_nuller_fjernes():
                          "driftsresultat_fjor": 40, "omsetningsvekst_pst": 16, "utsikter": "uendret", "tone": 1})
     assert r["eps"] is None and r["eps_fjor"] is None and r["omsetning"] is None and r["omsetningsvekst_pst"] is None
     assert r["driftsresultat"] == 50
+
+
+def test_like_tall_aar_mot_fjor_gir_ingen_vekst():
+    a = rapport.avledet(rapport.valider({"omsetning": 235.8, "omsetning_fjor": 229.9, "driftsresultat": 62.7,
+                                         "driftsresultat_fjor": 62.7, "eps": 0.19, "eps_fjor": 0.19, "tone": 1}))
+    assert a["rapport_omsvekst"] == pytest.approx(235.8 / 229.9 - 1)
+    assert a["rapport_marginendring"] is None and a["rapport_epsvekst"] is None
