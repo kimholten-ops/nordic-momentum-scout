@@ -140,13 +140,15 @@ def kjor_rapporter(fil=FIL_RAP) -> dict:
         return stat
     na = datetime.now(TZ).isoformat(timespec="seconds")
     with db.session() as con:
+        # Rader fra eldre promptversjoner fjernes; de tolkes på nytt.
+        con.execute("DELETE FROM rapporttall WHERE modell NOT LIKE ?", (f"%|{rapport.VERSJON}",))
         for linje in fil.read_text(encoding="utf-8").splitlines():
             if not linje.strip():
                 continue
             stat["lest"] += 1
             rad = json.loads(linje)
-            if "resultat" not in rad:
-                stat["feil"] += 1
+            if "resultat" not in rad or rad.get("versjon") != rapport.VERSJON:
+                stat["feil"] += 1  # feilet, eller tolket med en eldre prompt (tolkes på nytt)
                 continue
             try:
                 r = rapport.valider(rad["resultat"])
@@ -154,14 +156,14 @@ def kjor_rapporter(fil=FIL_RAP) -> dict:
                 stat["feil"] += 1
                 continue
             n = con.execute(
-                "INSERT OR IGNORE INTO rapporttall (group_id, slug, publisert, periode, valuta, omsetning, omsetning_fjor, "
+                "INSERT OR REPLACE INTO rapporttall (group_id, slug, publisert, periode, valuta, omsetning, omsetning_fjor, "
                 " driftsresultat, driftsresultat_fjor, eps, eps_fjor, omsetningsvekst_pst, utsikter, tone, modell, tolket) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (rad["group_id"], rad["slug"], rad["publisert"], r["periode"], r["valuta"], r["omsetning"],
                  r["omsetning_fjor"], r["driftsresultat"], r["driftsresultat_fjor"], r["eps"], r["eps_fjor"],
-                 r["omsetningsvekst_pst"], r["utsikter"], r["tone"], f"ollama:{rad.get('modell')}", na),
+                 r["omsetningsvekst_pst"], r["utsikter"], r["tone"], f"ollama:{rad.get('modell')}|{rapport.VERSJON}", na),
             ).rowcount
-            stat["lagt_inn" if n else "fantes"] += 1
+            stat["lagt_inn"] += 1
         con.commit()
         db.logg(con, "importer_rapporter", "ok", ", ".join(f"{k} {v}" for k, v in stat.items()))
     return stat

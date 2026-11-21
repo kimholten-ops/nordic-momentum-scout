@@ -112,14 +112,14 @@ def tolk_rapporter(maks: int | None, push_hver: int) -> int:
 
     with db.session() as con:
         kø = ko_rapporter(con)
-    gjort = ferdige(UT_RAP, "group_id")
+    gjort = ferdige(UT_RAP, "group_id", versjon=rapport.VERSJON)
     kø = [r for r in kø if r["group_id"] not in gjort][: maks or None]
     print(f"\nNøkkeltall fra kvartalsrapporter: {len(kø)} i kø ({len(gjort)} allerede gjort).", flush=True)
     start, nye = time.time(), 0
     with UT_RAP.open("a", encoding="utf-8") as f:
         for k, r in enumerate(kø, 1):
             rad = {"group_id": r["group_id"], "url": r["url"], "slug": r["slug"], "publisert": r["publisert"],
-                   "modell": OLLAMA_MODELL, "tid": datetime.now().isoformat(timespec="seconds")}
+                   "versjon": rapport.VERSJON, "modell": OLLAMA_MODELL, "tid": datetime.now().isoformat(timespec="seconds")}
             try:
                 rad["resultat"] = rapport.tolk(r["tittel"] or "", mfn.hent_brodtekst(r["url"]) or "")
             except Exception as e:  # noqa: BLE001 — nett, MFN, ugyldig svar: noter og fortsett
@@ -143,13 +143,15 @@ def tolk_rapporter(maks: int | None, push_hver: int) -> int:
     return 0
 
 
-def ferdige(fil: Path = UT, nokkel: str = "url") -> set[str]:
+def ferdige(fil: Path = UT, nokkel: str = "url", versjon: str | None = None) -> set[str]:
     if not fil.exists():
         return set()
     ut = set()
     for linje in fil.read_text(encoding="utf-8").splitlines():
         try:
-            ut.add(json.loads(linje)[nokkel])
+            rad = json.loads(linje)
+            if versjon is None or rad.get("versjon") == versjon:
+                ut.add(rad[nokkel])
         except (ValueError, KeyError):
             continue
     return ut

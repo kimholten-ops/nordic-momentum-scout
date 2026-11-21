@@ -23,6 +23,11 @@ import requests
 from src.config import OLLAMA_MODELL, OLLAMA_NUM_CTX, OLLAMA_URL
 
 MAKS_TEGN = 9000
+# r1 hadde et eksempel med ekte tall i prompten; qwen2.5:7b kopierte dem
+# (EPS 1,12/0,85, vekst 16 %, «uendret», tone 1). r2 har bare et skjema.
+VERSJON = "r2"
+_R1_EKSEMPEL = {"eps": 1.12, "eps_fjor": 0.85, "omsetning": 1520.0, "omsetning_fjor": 1310.0,
+                "driftsresultat": 182.0, "driftsresultat_fjor": 141.0, "omsetningsvekst_pst": 16.0}
 UTSIKTER = {"hevet": 1, "uendret": 0, "senket": -1, "ingen": None}
 
 SYSTEM_PROMPT = """Du leser kvartals- og årsrapporter fra børsnoterte selskaper (norsk, svensk, dansk, finsk eller engelsk) og henter ut nøkkeltall. Svar KUN med JSON.
@@ -40,17 +45,19 @@ Felter:
 Regler:
 - Alle beløp i samme enhet som teksten bruker for perioden (f.eks. millioner). Bare tall, ingen tekst. Negative tall med minus.
 - Bruk tallene for KVARTALET (ikke hittil i år) når begge finnes.
-- Står et tall ikke i teksten, sett null. Ikke regn ut og ikke gjett.
+- Står et tall ikke i teksten, sett null. Ikke regn ut, ikke gjett og ikke bruk 0 for «mangler».
+- «utsikter» er "ingen" med mindre teksten tydelig sier at prognosen heves, senkes eller gjentas.
+- «tone» er 0 med mindre teksten er tydelig positiv eller negativ.
 """
 
-EKSEMPEL = {"periode": "Q3 2026", "valuta": "NOK", "omsetning": 1520.0, "omsetning_fjor": 1310.0,
-            "driftsresultat": 182.0, "driftsresultat_fjor": 141.0, "eps": 1.12, "eps_fjor": 0.85,
-            "omsetningsvekst_pst": 16.0, "utsikter": "uendret", "tone": 1}
+SKJEMA = ('{"periode": tekst, "valuta": tekst, "omsetning": tall|null, "omsetning_fjor": tall|null, '
+          '"driftsresultat": tall|null, "driftsresultat_fjor": tall|null, "eps": tall|null, "eps_fjor": tall|null, '
+          '"omsetningsvekst_pst": tall|null, "utsikter": "hevet"|"senket"|"uendret"|"ingen", "tone": -2..2}')
 
 
 def bygg_prompt(tittel: str, tekst: str) -> str:
     return (f"Tittel: {tittel}\n\nTekst (starten av rapporten):\n{(tekst or '')[:MAKS_TEGN]}\n\n"
-            f"Svar med JSON i dette formatet: {json.dumps(EKSEMPEL, ensure_ascii=False)}")
+            f"Svar med JSON med disse feltene (bare tall fra teksten over): {SKJEMA}")
 
 
 def _tall(x) -> float | None:
@@ -69,6 +76,13 @@ def valider(d: dict) -> dict:
     for k in ("omsetning", "omsetning_fjor", "driftsresultat", "driftsresultat_fjor", "eps", "eps_fjor",
               "omsetningsvekst_pst"):
         ut[k] = _tall(d.get(k))
+    # Lekkasje fra r1-eksemplet og 0 brukt som «mangler» blir null.
+    for k, v in _R1_EKSEMPEL.items():
+        if ut[k] is not None and abs(ut[k] - v) < 1e-9:
+            ut[k] = None
+    for a, b in (("omsetning", "omsetning_fjor"), ("driftsresultat", "driftsresultat_fjor"), ("eps", "eps_fjor")):
+        if ut[a] == 0 and ut[b] in (0, None):
+            ut[a] = ut[b] = None
     u = str(d.get("utsikter") or "ingen").lower()
     ut["utsikter"] = u if u in UTSIKTER else "ingen"
     t = d.get("tone")
