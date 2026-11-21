@@ -117,7 +117,7 @@ def avledet(r: dict) -> dict:
     """Egenskaper til faktormodellen fra én tolket rapport. Urimelige verdier
     (feil enhet, fortegnsfeil) blir None heller enn å forvirre modellen."""
     def vekst(a, b):
-        if a is None or b is None or b <= 0:
+        if a is None or b is None or b <= 0 or a == b:  # helt like tall: modellen har trolig kopiert årets tall
             return None
         v = a / b - 1
         return v if -0.9 <= v <= 5 else None
@@ -126,9 +126,11 @@ def avledet(r: dict) -> dict:
         return a / s if a is not None and s and s > 0 and abs(a / s) < 2 else None
 
     m, mf = margin(r.get("driftsresultat"), r.get("omsetning")), margin(r.get("driftsresultat_fjor"), r.get("omsetning_fjor"))
+    if r.get("driftsresultat") is not None and r.get("driftsresultat") == r.get("driftsresultat_fjor"):
+        m = mf = None
     eps, epsf = r.get("eps"), r.get("eps_fjor")
     epsv = None
-    if eps is not None and epsf is not None and abs(epsf) > 1e-9:
+    if eps is not None and epsf is not None and abs(epsf) > 1e-9 and eps != epsf:
         epsv = max(-3.0, min(3.0, (eps - epsf) / abs(epsf)))
     return {
         "rapport_omsvekst": _foerste(vekst(r.get("omsetning"), r.get("omsetning_fjor")), _pst(r.get("omsetningsvekst_pst"))),
