@@ -73,8 +73,21 @@ def _pakk_ut(gz: Path, mål: Path) -> None:
     tmp = mål.with_suffix(".db.ny")
     with gzip.open(gz, "rb") as inn, tmp.open("wb") as ut:
         shutil.copyfileobj(inn, ut)
-    sqlite3.connect(tmp).execute("PRAGMA quick_check").fetchone()  # feiler på ødelagt fil
-    tmp.replace(mål)
+    con = sqlite3.connect(tmp)
+    try:
+        con.execute("PRAGMA quick_check").fetchone()  # feiler på ødelagt fil
+    finally:
+        con.close()  # Windows: en åpen tilkobling låser fila
+    for forsok in range(5):
+        try:
+            tmp.replace(mål)
+            return
+        except PermissionError:
+            if forsok == 4:
+                raise PermissionError(
+                    f"{mål} er i bruk av et annet program. Lukk andre vinduer som kjører Ollama-tolkningen "
+                    "(eller DB Browser o.l.) og prøv igjen.") from None
+            time.sleep(3)
 
 
 def hent(mål: Path = DB_PATH) -> int:
@@ -100,6 +113,9 @@ def hent(mål: Path = DB_PATH) -> int:
             shutil.copyfile(gz, TMP / FORRIGE)  # lastes opp som «forrige» ved neste last-opp
             print(f"Hentet databasen fra release «{TAG}»: {mål.stat().st_size / 1e6:.1f} MB.")
             return 0
+        except PermissionError as e:  # fila er låst lokalt: ny nedlasting hjelper ikke
+            print(f"FEIL: {e}", file=sys.stderr)
+            return 1
         except Exception as e:  # noqa: BLE001
             print(f"Nedlasting feilet ({e}); prøver igjen.", file=sys.stderr)
             time.sleep(10 * (forsok + 1))
