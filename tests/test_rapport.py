@@ -9,14 +9,14 @@ from src import db, rapport
 
 
 def test_valider_og_avledet():
-    r = rapport.valider({"periode": "Q3 2026", "valuta": "NOK", "omsetning": "1 520,0", "omsetning_fjor": 1310,
-                         "driftsresultat": 182, "driftsresultat_fjor": 141, "eps": 1.12, "eps_fjor": "0,85",
+    r = rapport.valider({"periode": "Q3 2026", "valuta": "NOK", "omsetning": "1 640,0", "omsetning_fjor": 1400,
+                         "driftsresultat": 190, "driftsresultat_fjor": 150, "eps": 1.3, "eps_fjor": "0,9",
                          "utsikter": "Hevet", "tone": "1"})
-    assert r["omsetning"] == 1520.0 and r["eps_fjor"] == 0.85 and r["utsikter"] == "hevet" and r["tone"] == 1
+    assert r["omsetning"] == 1640.0 and r["eps_fjor"] == 0.9 and r["utsikter"] == "hevet" and r["tone"] == 1
     a = rapport.avledet(r)
-    assert a["rapport_omsvekst"] == pytest.approx(1520 / 1310 - 1)
-    assert a["rapport_marginendring"] == pytest.approx(182 / 1520 - 141 / 1310)
-    assert a["rapport_epsvekst"] == pytest.approx((1.12 - 0.85) / 0.85)
+    assert a["rapport_omsvekst"] == pytest.approx(1640 / 1400 - 1)
+    assert a["rapport_marginendring"] == pytest.approx(190 / 1640 - 150 / 1400)
+    assert a["rapport_epsvekst"] == pytest.approx((1.3 - 0.9) / 0.9)
     assert a["rapport_utsikter"] == 1
 
 
