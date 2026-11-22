@@ -94,9 +94,15 @@ def lagre(con, res: simuler.Resultat, p: simuler.Param, ekstra: dict | None = No
     return status
 
 
-def formater_forslag(f) -> str:
+def formater_forslag(f, forklaring: str | None = None) -> str:
     grunner = "; ".join(f"{esc(b[0])} {_pst(b[1])}" for b in json.loads(f["bidrag"])[:3])
     ticker = (f["yahoo"] or "").split(".")[0]
+    if forklaring:
+        return (
+            f"📈 <b>Forslag: kjøp {esc(f['navn'])}</b> ({esc(ticker)})\n"
+            f"{esc(forklaring)}\n"
+            "<i>Papirhandel/læring — ikke kjøpsråd.</i>"
+        )
     return (
         f"📈 <b>Forslag: kjøp {esc(f['navn'])}</b> ({esc(ticker)})\n"
         f"Inngang: åpning {f['inn_dato']}, maks {_kr(f['limit_pris'])}\n"
@@ -108,12 +114,15 @@ def formater_forslag(f) -> str:
     )
 
 
-def varsle(con) -> int:
+def varsle(con, kandidater: list[dict] | None = None) -> int:
+    """Sender nye forslag. Forklaringen i vanlig språk hentes fra kandidaten
+    for samme selskap når den finnes."""
+    forklar = {c["slug"]: c.get("forklaring") for c in (kandidater or [])}
     n = 0
     for f in con.execute(
         "SELECT * FROM hjerne_forslag WHERE anbefalt = 1 AND varslet = 0 ORDER BY pred DESC"
     ).fetchall():
-        if send(formater_forslag(f), push=True, tittel=f"Kjøpsforslag: {f['navn']}"):
+        if send(formater_forslag(f, forklar.get(f["slug"])), push=True, tittel=f"Kjøpsforslag: {f['navn']}"):
             con.execute("UPDATE hjerne_forslag SET varslet = 1 WHERE nokkel = ?", (f["nokkel"],))
             n += 1
     con.commit()
@@ -149,7 +158,7 @@ def kjor(varsle_nye: bool = HJERNE_VARSLE) -> dict:
             },
         }
         status = lagre(con, res, p, ekstra)
-        varslet = varsle(con) if varsle_nye else 0
+        varslet = varsle(con, kandidater) if varsle_nye else 0
         t = status["trades"]
         db.logg(
             con, "hjerne", "ok",

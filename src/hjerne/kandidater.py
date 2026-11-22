@@ -22,6 +22,7 @@ from bisect import bisect_right
 from datetime import date, timedelta
 
 from src import marked
+from src.hjerne import forklaring
 from src.config import PANEL_FILTER_PERSENTIL, REGEL_ADVARSEL, REGEL_LIKVID, REGEL_PLUSS
 from src.hjerne.hendelser import Hendelse
 from src.hjerne.modell import Modell
@@ -167,4 +168,5 @@ def ranger(
     ut.sort(key=lambda c: (c["status"] == "sen", ANBEFALING_ORDEN.index(c["anbefaling"]), -c["score"]))
     for n, c in enumerate(ut, 1):
         c["rang"] = n
+        c["forklaring"] = forklaring.tekst(c)
     return ut

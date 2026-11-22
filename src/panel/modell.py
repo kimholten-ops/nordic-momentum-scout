@@ -117,9 +117,24 @@ def evaluer(P: pd.DataFrame, horisont: int = 20) -> dict:
     }
 
 
+def _komma(t: str) -> str:
+    return t.replace(".", ",")
+
+
 def _verdi_tekst(k: str, v) -> str:
     if v is None or (isinstance(v, float) and not math.isfinite(v)):
         return "–"
+    return _komma(_verdi_tekst_rå(k, v)) if not isinstance(v, str) else _verdi_tekst_rå(k, v)
+
+
+def _verdi_tekst_rå(k: str, v) -> str:
+    if k in ("rapport_volum", "volumspike"):
+        return f"{v:.1f}x normalt"
+    if k == "innside_netto_mnok_90":
+        mnok = math.copysign(10 ** abs(v) - 1, v)
+        return f"{mnok:+.1f} MNOK".replace("+-", "-")
+    if k == "rapport_tone":
+        return {2: "svært positiv", 1: "positiv", 0: "nøytral", -1: "negativ", -2: "svært negativ"}.get(int(v), str(v))
     if k in PROSENT:
         return f"{v:+.0%}".replace("+-", "-") if k not in ("vol_60", "utbytte_12m") else f"{v:.0%}"
     if k == "log_omsetning":
