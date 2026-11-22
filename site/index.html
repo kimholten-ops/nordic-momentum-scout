@@ -102,6 +102,9 @@
   .skala { position:relative; height:8px; background:var(--linje); border-radius:99px; margin:8px 0 4px; }
   .skala i { position:absolute; top:-3px; width:3px; height:14px; border-radius:2px; }
   .knapp.liten { font-size:12px; padding:3px 9px; }
+  .kand > * { order: 2; }
+  .kand > .hode, .kand > .hor, .kand > .plan { order: 0; }
+  .forklartekst { grid-column: 1 / -1; order: 1 !important; margin: 0; padding: 10px 12px; background: var(--bg); border-radius: 8px; font-size: 14px; line-height: 1.55; color: var(--tekst); }
   /* Aksjescore */
   .tidelgraf { display:grid; grid-template-columns:repeat(10,1fr); gap:4px; align-items:end; height:90px; margin:8px 0 2px; }
   .tidelgraf div { border-radius:4px 4px 0 0; min-height:2px; }
@@ -292,6 +295,7 @@ function kandidatKort(c) {
         c.regelsjekk && c.regelsjekk.ok ? el("span", {class: "merk m-kjøp", title: "Enkel regelstrategi: likvid, ingen advarsel, minst ett plusstegn (" + c.regelsjekk.pluss.join(", ") + ")", text: "✓ Regelsjekk"}) : null,
         filterTekst ? el("span", {class: "merk m-unngå", title: "Hardt filter: papirhandles og anbefales aldri", text: "Filtrert bort · " + filterTekst}) : null,
         el("div", {class: "stat", text: statusTekst(c)}))),
+    c.forklaring ? el("p", {class: "forklartekst", text: c.forklaring}) : null,
     horisontBoks("Kort sikt", c.kort, c.posisjon),
     horisontBoks("Lang sikt", c.lang, c.posisjon),
     el("div", {class: "plan"}, el("dl", {},

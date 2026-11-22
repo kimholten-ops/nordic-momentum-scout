@@ -71,3 +71,19 @@ def test_like_tall_aar_mot_fjor_gir_ingen_vekst():
                                          "driftsresultat_fjor": 62.7, "eps": 0.19, "eps_fjor": 0.19, "tone": 1}))
     assert a["rapport_omsvekst"] == pytest.approx(235.8 / 229.9 - 1)
     assert a["rapport_marginendring"] is None and a["rapport_epsvekst"] is None
+
+
+def test_forklaring_i_vanlig_spraak():
+    from src.hjerne import forklaring
+
+    c = {"kilde": "innside", "publisert": "2026-11-13T08:00:00", "anbefaling": "kjøp", "status": "løpende", "hittil": -0.05,
+         "beskrivelse": "Innsidekjøp: Fisk, Louise (SVP), Heard, David (SVP), Ola Nordmann (CFO)  ~392 708 NOK",
+         "kort": {"dager": 5, "forventet": 0.007, "p_gevinst": 0.54, "maal": 6.61, "ut_dato": "2026-11-30",
+                  "bidrag": [("kurs.likviditet=høy", 0.004), ("kurs.momentum20=ned >10%", 0.002), ("kurs.regime=fallende marked", -0.003)]},
+         "lang": {"dager": 20, "forventet": -0.01, "bidrag": []}, "limit": 6.51, "stopp": 5.83, "inn_dato": "2026-11-23",
+         "aksjescore": {"persentil": 0.63, "region": "Norden", "bidrag": {"opp": [{"navn": "Likviditet", "verdi": "1,2 mrd NOK/d"}],
+                                                                             "ned": [{"navn": "Volatilitet", "verdi": "59%"}]}}}
+    t = forklaring.tekst(c)
+    assert t.startswith("13. nov.: Fisk, Louise (SVP) og 2 andre innsidere kjøpte aksjer for rundt 392 708 kr.")
+    assert "at aksjen er mye omsatt" in t and "at børsen er i en fallende trend" in t
+    assert "Plan: kjøp for inntil 6,51 kr" in t and "Kursen har falt 5 %" in t
