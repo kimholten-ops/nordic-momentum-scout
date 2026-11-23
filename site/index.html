@@ -105,6 +105,88 @@
   .kand > * { order: 2; }
   .kand > .hode, .kand > .hor, .kand > .plan { order: 0; }
   .forklartekst { grid-column: 1 / -1; order: 1 !important; margin: 0; padding: 10px 12px; background: var(--bg); border-radius: 8px; font-size: 14px; line-height: 1.55; color: var(--tekst); }
+
+  /* Utvalg */
+  .u-sammen { font-size: 17px; line-height: 1.5; margin: 4px 0 16px; max-width: 70ch; }
+  .u-topp { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+  .u-kart { margin: 0; background: var(--kort); border: 1px solid var(--linje); border-radius: 14px; padding: 12px 12px 8px; }
+  .u-kart figcaption { font-size: 12.5px; color: var(--dempet); margin: 4px 6px 2px; }
+  .u-svg { width: 100%; height: auto; display: block; font-variant-numeric: tabular-nums; }
+  .u-sone { fill: var(--pos); opacity: .07; }
+  .u-sonetekst { fill: var(--pos); font-size: 12px; font-weight: 600; opacity: .8; }
+  .u-rutenett { stroke: var(--linje); stroke-width: 1; }
+  .u-null { stroke: var(--dempet); stroke-width: 1.2; stroke-dasharray: 3 3; }
+  .u-akse { fill: var(--dempet); font-size: 11px; }
+  .u-aksenavn { fill: var(--dempet); font-size: 12px; }
+  .u-prikk { cursor: pointer; outline: none; animation: u-inn .5s cubic-bezier(.2,.8,.2,1) backwards; }
+  .u-prikk circle { fill: var(--f); fill-opacity: .82; stroke: var(--kort); stroke-width: 1.5; transition: r .15s; }
+  .u-prikk.filtrert circle { fill: transparent; stroke: var(--f); stroke-width: 1.5; stroke-dasharray: 2 2; }
+  .u-prikk:hover circle, .u-prikk:focus-visible circle { stroke: var(--tekst); stroke-width: 2; }
+  .u-prikk.valgt circle { stroke: var(--tekst); stroke-width: 3; fill-opacity: 1; }
+  .u-etikett { font-size: 11.5px; font-weight: 600; fill: var(--tekst); pointer-events: none; }
+  @keyframes u-inn { from { opacity: 0; transform: translateY(12px); } }
+  @media (prefers-reduced-motion: reduce) { .u-prikk { animation: none; } }
+  .u-detalj { background: var(--kort); border: 1px solid var(--linje); border-radius: 14px; padding: 16px 18px; position: sticky; top: 12px; min-height: 200px; }
+  .u-hint { color: var(--dempet); }
+  .u-dhode { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+  .u-dhode h3 { margin: 0; font-size: 21px; letter-spacing: -.01em; }
+  .u-meta { color: var(--dempet); font-size: 13px; margin-top: 2px; }
+  .u-merke { white-space: nowrap; font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: var(--f); border: 1.5px solid var(--f); }
+  .u-tall { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .u-tall b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .u-tall span { font-size: 12px; color: var(--dempet); }
+  .u-detalj .u-graf { width: 100%; height: auto; margin: 6px 0 4px; }
+  .u-linje { stroke-width: 1; stroke-dasharray: 4 3; }
+  .u-linje.stopp, .u-linjetekst.stopp { stroke: var(--neg); fill: var(--neg); }
+  .u-linje.inn, .u-linjetekst.inn { stroke: var(--dempet); fill: var(--dempet); }
+  .u-linje.maal, .u-linjetekst.maal { stroke: var(--pos); fill: var(--pos); }
+  .u-melding { stroke: var(--gul); stroke-width: 1.2; }
+  .u-forklaring-graf { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--dempet); }
+  .u-forklaring-graf span::before { content: ""; display: inline-block; width: 14px; height: 0; border-top: 1.5px dashed currentColor; vertical-align: middle; margin-right: 5px; }
+  .u-forklaring-graf .maal { color: var(--pos); } .u-forklaring-graf .stopp { color: var(--neg); } .u-forklaring-graf .melding { color: var(--gul); }
+  .u-forklaring-graf .melding::before { border-top: 0; border-left: 1.5px solid currentColor; height: 10px; width: 0; }
+  .u-forklaring-graf .periode { margin-left: auto; } .u-forklaring-graf .periode::before { display: none; }
+  .u-forklar { font-size: 14px; line-height: 1.55; margin: 8px 0 10px; }
+  .u-grunner ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+  .u-grunner li { padding-left: 20px; position: relative; }
+  .u-grunner .for li::before { content: "+"; color: var(--pos); font-weight: 700; position: absolute; left: 4px; }
+  .u-grunner .mot li::before { content: "−"; color: var(--neg); font-weight: 700; position: absolute; left: 4px; }
+  .u-plan { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--linje); font-size: 13.5px; }
+  .u-plan dt { color: var(--dempet); } .u-plan dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .u-filter { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: 22px 0 8px; padding: 12px 14px; background: var(--kort); border: 1px solid var(--linje); border-radius: 12px; }
+  .u-gruppe { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .u-gnavn { font-size: 12.5px; color: var(--dempet); margin-right: 2px; }
+  .u-chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--linje); background: transparent; color: var(--dempet); cursor: pointer; }
+  .u-chip i { width: 8px; height: 8px; border-radius: 50%; opacity: .35; }
+  .u-chip[aria-pressed="true"] { color: var(--tekst); border-color: var(--tekst); }
+  .u-chip[aria-pressed="true"] i { opacity: 1; }
+  .u-chip:focus-visible, .u-rad:focus-visible, .u-filter input:focus-visible, .u-filter select:focus-visible { outline: 2px solid var(--aksent); outline-offset: 2px; }
+  .u-slider { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dempet); }
+  .u-slider input { width: 110px; accent-color: var(--aksent); }
+  .u-slider output { min-width: 34px; color: var(--tekst); font-variant-numeric: tabular-nums; }
+  .u-sjekk { font-size: 13px; color: var(--dempet); display: inline-flex; gap: 6px; align-items: center; }
+  .u-sok { flex: 1 1 180px; min-width: 150px; }
+  .u-teller { font-size: 12.5px; color: var(--dempet); margin: 6px 2px; }
+  .u-liste { display: grid; gap: 6px; }
+  .u-rad { display: grid; grid-template-columns: 12px minmax(150px, 1.1fr) 140px 110px 120px minmax(0, 2fr); gap: 14px; align-items: center; text-align: left; width: 100%;
+           font: inherit; color: inherit; background: var(--kort); border: 1px solid var(--linje); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  .u-rad:hover { border-color: var(--dempet); }
+  .u-rad.valgt { border-color: var(--tekst); box-shadow: inset 3px 0 0 var(--tekst); }
+  .u-prikklite { width: 10px; height: 10px; border-radius: 50%; background: var(--f); }
+  .u-prikklite[data-hul="1"] { background: transparent; border: 1.5px dashed var(--f); }
+  .u-navn b { display: block; font-size: 15px; } .u-navn small, .u-forv small, .u-score small { display: block; font-size: 12px; color: var(--dempet); }
+  .u-forv b { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .u-meter { display: block; height: 6px; border-radius: 3px; background: var(--linje); overflow: hidden; margin-bottom: 4px; }
+  .u-meter i { display: block; height: 100%; background: var(--aksent); }
+  .u-hvorfor { display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 12.5px; }
+  .u-hvorfor span { padding: 2px 8px; border-radius: 6px; background: var(--bg); }
+  .u-hvorfor .for::before { content: "+ "; color: var(--pos); font-weight: 700; }
+  .u-hvorfor .mot::before { content: "− "; color: var(--neg); font-weight: 700; }
+  @media (max-width: 900px) {
+    .u-topp { grid-template-columns: 1fr; } .u-detalj { position: static; }
+    .u-rad { grid-template-columns: 12px 1fr auto; } .u-rad .u-graf, .u-rad .u-score { display: none; }
+    .u-hvorfor { grid-column: 2 / -1; }
+  }
   /* Aksjescore */
   .tidelgraf { display:grid; grid-template-columns:repeat(10,1fr); gap:4px; align-items:end; height:90px; margin:8px 0 2px; }
   .tidelgraf div { border-radius:4px 4px 0 0; min-height:2px; }
@@ -128,6 +210,7 @@
 </header>
 <nav role="tablist" id="faner"></nav>
 <main>
+  <section id="utvalg" hidden></section>
   <section id="kandidater" hidden></section>
   <section id="aksjescore" hidden></section>
   <section id="simulering" hidden></section>
@@ -141,7 +224,7 @@
 
 <script>
 "use strict";
-const FANER = [["kandidater","Kandidater"],["aksjescore","Aksjescore"],["simulering","Simulering"],["oversikt","Oversikt"],["hjerne","Hjerne"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
+const FANER = [["utvalg","Utvalg"],["kandidater","Kandidater"],["aksjescore","Aksjescore"],["simulering","Simulering"],["oversikt","Oversikt"],["hjerne","Hjerne"],["handler","Innsidehandler"],["backtest","Backtest"],["nyheter","Nyheter"],["drift","Drift"]];
 const ROLLER = {ceo:"CEO",cfo:"CFO",styreleder:"Styreleder",styremedlem:"Styremedlem",ledelse:"Ledelse",naerstaaende:"Nærstående",ukjent:"Ukjent"};
 const RETNING = {kjop:"Kjøp",salg:"Salg",tildeling:"Tildeling",annet:"Annet"};
 let D = null;
@@ -317,6 +400,213 @@ function kandidatKort(c) {
       el("p", {class: "under", text: `${c.beskrivelse} · publisert ${c.publisert.replace("T", " ").slice(0, 16)}`}),
       ...bidragListe("Hva trekker forventningen opp eller ned, kort sikt:", c.kort.bidrag),
       ...bidragListe("Lang sikt:", c.lang.bidrag)));
+}
+
+// ---------- Utvalg: signalkart + filtrerbar liste ----------
+const SVGNS = "http://www.w3.org/2000/svg";
+function svg(tag, attrs, ...barn) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) { if (k === "text") e.textContent = v; else e.setAttribute(k, v); }
+  for (const b of barn) if (b != null) e.append(b);
+  return e;
+}
+const ANB_FARGE = {"kjøp": "var(--pos)", "følg med": "var(--gul)", "nøytral": "var(--dempet)", "unngå": "var(--neg)"};
+const ANB_TEKST = {"kjøp": "Kjøp", "følg med": "Følg med", "nøytral": "Nøytral", "unngå": "Unngå"};
+const BORS_TEKST = {OL: "Oslo", ST: "Stockholm", HE: "Helsingfors", CO: "København", US: "USA"};
+const bestH = (c) => ((c.lang || {}).forventet ?? -9) > ((c.kort || {}).forventet ?? -9) ? c.lang : c.kort;
+const aScore = (c) => c.aksjescore ? Math.round(c.aksjescore.persentil * 100) : null;
+
+function minigraf(c, b = 140, h = 36, linjer = false) {
+  const k = (D.kurser || {})[c.yahoo];
+  const g = svg("svg", {viewBox: `0 0 ${b} ${h}`, width: b, height: h, class: "u-graf", "aria-hidden": "true"});
+  if (!k || !k.close || k.close.length < 5) return g;
+  const n = linjer ? k.close.length : Math.min(60, k.close.length);
+  const xs = k.close.slice(-n), ds = k.dato.slice(-n);
+  const ekstra = linjer ? [c.limit, c.stopp, bestH(c).maal].filter(v => v) : [];
+  const lo = Math.min(...xs, ...ekstra), hi = Math.max(...xs, ...ekstra), sp = (hi - lo) || 1;
+  const y = (v) => h - 3 - (v - lo) / sp * (h - 6), x = (i) => 1 + i * (b - 2) / (n - 1);
+  if (linjer) {
+    for (const [v, kl, t] of [[c.stopp, "stopp", "Stopp"], [c.limit, "inn", "Inngang"], [bestH(c).maal, "maal", "Mål"]]) {
+      if (!v) continue;
+      g.append(svg("line", {x1: 0, x2: b, y1: y(v), y2: y(v), class: "u-linje " + kl}, svg("title", {text: `${t} ${kr(v)}`})));
+    }
+    const pub = ds.findIndex(d => d >= (c.publisert || "").slice(0, 10));
+    if (pub >= 0) g.append(svg("line", {x1: x(pub), x2: x(pub), y1: 0, y2: h, class: "u-melding"}));
+  }
+  const opp = xs[xs.length - 1] >= xs[0];
+  g.append(svg("polyline", {points: xs.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" "),
+    fill: "none", stroke: opp ? "var(--pos)" : "var(--neg)", "stroke-width": linjer ? 1.6 : 1.4, "stroke-linejoin": "round"}));
+  return g;
+}
+
+function utvalgFane() {
+  const s = document.getElementById("utvalg"), st = (D.hjerne || {}).status;
+  s.replaceChildren();
+  if (!st || !st.kandidater || !st.kandidater.length) { s.append(el("div", {class: "tom", text: "Ingen aktuelle kandidater akkurat nå. Nye innsidekjøp og børsmeldinger dukker opp her etter neste kjøring."})); return; }
+  const alle = st.kandidater.filter(c => c.status !== "sen");
+  const ant = (a) => alle.filter(c => c.anbefaling === a && !c.filter).length;
+  const filtrert = alle.filter(c => c.filter).length;
+  const regime = (alle.find(c => (c.egenskaper || {})["kurs.regime"]) || {egenskaper: {}}).egenskaper["kurs.regime"];
+  s.append(el("p", {class: "u-sammen", text:
+    `${alle.length} aktuelle kandidater: ${ant("kjøp")} kjøp, ${ant("følg med")} å følge med, ${ant("nøytral")} nøytrale, ${ant("unngå")} å unngå` +
+    (filtrert ? `, og ${filtrert} som er filtrert bort` : "") + "." + (regime && regime !== "ukjent" ? ` Børsen er i en ${regime.replace("marked", "trend")}.` : "")}));
+
+  // Tilstand
+  const tilst = {anb: new Set(["kjøp", "følg med", "nøytral", "unngå"]), bors: new Set(), kilde: "", visFiltrert: false,
+                 minScore: 0, minSjanse: 0, sok: "", sort: "rang", valgt: null};
+  const synlige = () => alle.filter(c => tilst.anb.has(c.anbefaling) && (tilst.visFiltrert || !c.filter)
+      && (!tilst.bors.size || tilst.bors.has(c.bors)) && (!tilst.kilde || c.kilde === tilst.kilde)
+      && (aScore(c) ?? 50) >= tilst.minScore && ((bestH(c).p_gevinst || 0) * 100) >= tilst.minSjanse
+      && (!tilst.sok || (c.navn + " " + c.ticker).toLowerCase().includes(tilst.sok)))
+    .sort({rang: (a, b) => a.rang - b.rang, forventet: (a, b) => bestH(b).forventet - bestH(a).forventet,
+           score: (a, b) => (aScore(b) ?? -1) - (aScore(a) ?? -1), nyest: (a, b) => b.publisert.localeCompare(a.publisert)}[tilst.sort]);
+
+  // Kart + detalj
+  const kart = el("figure", {class: "u-kart"});
+  const detalj = el("aside", {class: "u-detalj", "aria-live": "polite"});
+  s.append(el("div", {class: "u-topp"}, kart, detalj));
+
+  // Filter
+  const chip = (tekst, aktiv, vedKlikk, farge) => {
+    const b = el("button", {class: "u-chip", "aria-pressed": String(aktiv)}, farge ? el("i", {style: `background:${farge}`}) : null, tekst);
+    b.addEventListener("click", () => { vedKlikk(); b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")); oppdater(); });
+    return b;
+  };
+  const gruppe = (navn, ...barn) => el("div", {class: "u-gruppe", role: "group", "aria-label": navn}, el("span", {class: "u-gnavn", text: navn}), ...barn);
+  const borser = [...new Set(alle.map(c => c.bors))].sort();
+  const slider = (navn, maks, steg, felt, enhet) => {
+    const ut = el("output", {text: "0" + enhet});
+    const inp = el("input", {type: "range", min: 0, max: maks, step: steg, value: 0, "aria-label": navn});
+    inp.addEventListener("input", () => { tilst[felt] = +inp.value; ut.textContent = inp.value + enhet; oppdater(); });
+    return el("label", {class: "u-slider"}, el("span", {text: navn}), inp, ut);
+  };
+  const sok = el("input", {type: "search", placeholder: "Søk selskap eller ticker", class: "u-sok"});
+  sok.addEventListener("input", () => { tilst.sok = sok.value.toLowerCase().trim(); oppdater(); });
+  const sorter = el("select", {"aria-label": "Sorter"}, ...[["rang", "Beste først"], ["forventet", "Høyest forventning"], ["score", "Sterkest aksje"], ["nyest", "Nyeste melding"]].map(([v, t]) => el("option", {value: v, text: t})));
+  sorter.addEventListener("change", () => { tilst.sort = sorter.value; oppdater(); });
+  const visF = el("input", {type: "checkbox"});
+  visF.addEventListener("change", () => { tilst.visFiltrert = visF.checked; oppdater(); });
+  s.append(el("div", {class: "u-filter"},
+    gruppe("Vurdering", ...Object.keys(ANB_TEKST).map(a => chip(ANB_TEKST[a], true, () => tilst.anb.has(a) ? tilst.anb.delete(a) : tilst.anb.add(a), ANB_FARGE[a]))),
+    gruppe("Børs", ...borser.map(b => chip(BORS_TEKST[b] || b, false, () => tilst.bors.has(b) ? tilst.bors.delete(b) : tilst.bors.add(b)))),
+    gruppe("Hendelse", ...[["innside", "Innsidekjøp"], ["nyhet", "Børsmelding"]].map(([k, t]) => {
+      const b = chip(t, false, () => { tilst.kilde = tilst.kilde === k ? "" : k; });
+      b.addEventListener("click", () => b.parentElement.querySelectorAll(".u-chip").forEach(x => { if (x !== b) x.setAttribute("aria-pressed", "false"); }));
+      return b;
+    })),
+    slider("Aksjescore minst", 90, 10, "minScore", ""), slider("Sjanse for gevinst minst", 60, 5, "minSjanse", " %"),
+    el("label", {class: "u-sjekk"}, visF, " Vis filtrerte"), sok, sorter));
+  const teller = el("p", {class: "u-teller"});
+  const liste = el("div", {class: "u-liste", role: "list"});
+  s.append(teller, liste);
+
+  function velg(c, rull) {
+    tilst.valgt = c ? c.nokkel : null;
+    tegnDetalj(c);
+    kart.querySelectorAll(".u-prikk").forEach(p => p.classList.toggle("valgt", p.dataset.n === tilst.valgt));
+    liste.querySelectorAll(".u-rad").forEach(r => r.classList.toggle("valgt", r.dataset.n === tilst.valgt));
+    if (rull && window.matchMedia("(max-width: 900px)").matches) detalj.scrollIntoView({behavior: "smooth", block: "start"});
+  }
+
+  function tegnDetalj(c) {
+    detalj.replaceChildren();
+    if (!c) { detalj.append(el("p", {class: "u-hint", text: "Velg en kandidat i kartet eller listen for å se hvorfor den er aktuell."})); return; }
+    const h = bestH(c), sc = aScore(c);
+    const g = c.grunner || {for: [], mot: []};
+    detalj.append(
+      el("div", {class: "u-dhode"},
+        el("div", {}, el("h3", {text: c.navn}), el("div", {class: "u-meta", text: `${c.ticker}, ${BORS_TEKST[c.bors] || c.bors}, ${c.kilde === "innside" ? "innsidekjøp" : "børsmelding"} ${datoKort(c.publisert.slice(0, 10))}`})),
+        el("span", {class: "u-merke", style: `--f:${ANB_FARGE[c.anbefaling]}`, text: c.filter ? "Filtrert bort" : ANB_TEKST[c.anbefaling]})),
+      el("div", {class: "u-tall"},
+        el("div", {}, el("b", {class: klasse(h.forventet), text: pst(h.forventet)}), el("span", {text: `forventet mot børsen, ${h.dager} dager`})),
+        el("div", {}, el("b", {text: Math.round((h.p_gevinst || 0) * 100) + " %"}), el("span", {text: "sjanse for gevinst"})),
+        el("div", {}, el("b", {text: sc == null ? "–" : sc}), el("span", {text: "aksjescore av 100"}))),
+      minigraf(c, 360, 120, true),
+      el("div", {class: "u-forklaring-graf"},
+        el("span", {class: "maal", text: `Mål ${kr(h.maal)}`}), el("span", {class: "inn", text: `Inngang ${kr(c.limit)}`}),
+        el("span", {class: "stopp", text: `Stopp ${kr(c.stopp)}`}), el("span", {class: "melding", text: "Meldingen"}),
+        el("span", {class: "periode", text: "siste 6 mnd"})),
+      el("p", {class: "u-forklar", text: c.forklaring || ""}),
+      el("div", {class: "u-grunner"},
+        g.for.length ? el("ul", {class: "for", "aria-label": "Taler for"}, ...g.for.map(t => el("li", {text: t}))) : null,
+        g.mot.length ? el("ul", {class: "mot", "aria-label": "Taler mot"}, ...g.mot.map(t => el("li", {text: t}))) : null),
+      el("dl", {class: "u-plan"},
+        el("dt", {text: "Kjøp for inntil"}), el("dd", {text: `${kr(c.limit)} ved åpning ${datoKort(c.inn_dato)}`}),
+        el("dt", {text: "Mål"}), el("dd", {text: `${kr(h.maal)} innen ${datoKort(h.ut_dato)}`}),
+        el("dt", {text: "Stopp"}), el("dd", {text: kr(c.stopp)}),
+        el("dt", {text: "Beløp"}), el("dd", {text: c.for_liten ? `${fmt(c.posisjon)} kr (for lite)` : `${fmt(c.posisjon)} kr, ${fmt(c.antall)} aksjer`})));
+  }
+
+  function tegnKart(v) {
+    const smal = (kart.clientWidth || window.innerWidth) < 560;
+    const B = smal ? 380 : 640, H = smal ? 300 : 360, ml = 46, mr = 14, mt = 14, mb = 38;
+    const ys = v.map(c => bestH(c).forventet);
+    const ymax = Math.min(0.06, Math.max(0.01, ...ys.map(Math.abs)) * 1.15);
+    const X = (s) => ml + (s / 100) * (B - ml - mr), Y = (f) => mt + (1 - (Math.max(-ymax, Math.min(ymax, f)) + ymax) / (2 * ymax)) * (H - mt - mb);
+    const oms = v.map(c => Math.log10(Math.max(1e5, c.omsetning_nok || 1e5)));
+    const r = (c) => 4 + (Math.log10(Math.max(1e5, c.omsetning_nok || 1e5)) - 5) * 2.2;
+    const g = svg("svg", {viewBox: `0 0 ${B} ${H}`, class: "u-svg", role: "img", "aria-label": "Signalkart: aksjescore mot forventet avkastning"});
+    g.append(svg("rect", {x: X(50), y: mt, width: X(100) - X(50), height: Y(0) - mt, class: "u-sone"}),
+             svg("text", {x: X(100) - 6, y: mt + 16, "text-anchor": "end", class: "u-sonetekst", text: "Sterk aksje og godt signal"}));
+    for (const t of [0, 25, 50, 75, 100]) g.append(svg("line", {x1: X(t), x2: X(t), y1: mt, y2: H - mb, class: "u-rutenett"}),
+                                                    svg("text", {x: X(t), y: H - mb + 15, "text-anchor": "middle", class: "u-akse", text: t}));
+    for (const f of [-ymax, -ymax / 2, 0, ymax / 2, ymax]) g.append(
+      svg("line", {x1: ml, x2: B - mr, y1: Y(f), y2: Y(f), class: f === 0 ? "u-null" : "u-rutenett"}),
+      svg("text", {x: ml - 6, y: Y(f) + 4, "text-anchor": "end", class: "u-akse", text: pst(f, 0)}));
+    g.append(svg("text", {x: (ml + B - mr) / 2, y: H - 4, "text-anchor": "middle", class: "u-aksenavn", text: "Aksjescore: hvor sterk aksjen er mot andre"}),
+             svg("text", {x: 12, y: (mt + H - mb) / 2, "text-anchor": "middle", transform: `rotate(-90 12 ${(mt + H - mb) / 2})`, class: "u-aksenavn", text: "Forventet mot børsen"}));
+    const rolig = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const merket = [];  // etiketter som allerede er plassert (unngå overlapp)
+    [...v].sort((a, b) => b.omsetning_nok - a.omsetning_nok).forEach((c, i) => {
+      const sc = aScore(c) ?? 50, f = bestH(c).forventet, farge = ANB_FARGE[c.anbefaling];
+      const p = svg("g", {class: "u-prikk" + (c.filter ? " filtrert" : ""), "data-n": c.nokkel, tabindex: 0, role: "button",
+                          "aria-label": `${c.navn}: ${ANB_TEKST[c.anbefaling]}, forventet ${pst(f)}, aksjescore ${aScore(c) ?? "ukjent"}`},
+        svg("title", {text: `${c.navn} (${c.ticker})\n${c.filter ? "Filtrert bort" : ANB_TEKST[c.anbefaling]}, forventet ${pst(f)}, aksjescore ${aScore(c) ?? "–"}`}),
+        svg("circle", {cx: X(sc), cy: Y(f), r: Math.max(4, r(c)), style: `--f:${farge}`}),
+        (() => {
+          if (!((c.anbefaling === "kjøp" || c.anbefaling === "følg med") && !c.filter)) return null;
+          const px = X(sc), py = Y(f);
+          if (merket.some(([a, b2]) => Math.abs(a - px) < 46 && Math.abs(b2 - py) < 14)) return null;
+          merket.push([px, py]);
+          const venstre = px > B - 70;
+          return svg("text", {x: venstre ? px - Math.max(4, r(c)) - 4 : px + Math.max(4, r(c)) + 4, y: py + 4,
+                              "text-anchor": venstre ? "end" : "start", class: "u-etikett", text: c.ticker});
+        })());
+      if (!rolig) p.style.animationDelay = `${i * 25}ms`;
+      p.addEventListener("click", () => velg(c, true));
+      p.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); velg(c, true); } });
+      g.append(p);
+    });
+    kart.replaceChildren(g, el("figcaption", {text: "Hver prikk er en kandidat. Større prikk betyr mer omsatt aksje; hul prikk er filtrert bort. Øverst til høyre er sterke aksjer med positivt signal."}));
+  }
+
+  function tegnListe(v) {
+    teller.textContent = v.length === alle.length ? `Viser alle ${v.length}` : `Viser ${v.length} av ${alle.length}`;
+    liste.replaceChildren(...v.map(c => {
+      const h = bestH(c), sc = aScore(c), g = c.grunner || {for: [], mot: []};
+      const rad = el("button", {class: "u-rad", "data-n": c.nokkel, role: "listitem"},
+        el("span", {class: "u-prikklite", style: `--f:${ANB_FARGE[c.anbefaling]}`, "data-hul": c.filter ? "1" : "0"}),
+        el("span", {class: "u-navn"}, el("b", {text: c.navn}), el("small", {text: `${c.ticker}, ${BORS_TEKST[c.bors] || c.bors}, ${c.filter ? "filtrert bort" : ANB_TEKST[c.anbefaling].toLowerCase()}`})),
+        minigraf(c),
+        el("span", {class: "u-forv"}, el("b", {class: klasse(h.forventet), text: pst(h.forventet)}), el("small", {text: `${h.dager} d, ${Math.round((h.p_gevinst || 0) * 100)} % sjanse`})),
+        el("span", {class: "u-score", title: "Aksjescore"}, el("span", {class: "u-meter"}, el("i", {style: `width:${sc ?? 0}%`})), el("small", {text: sc == null ? "ingen score" : `aksjescore ${sc}`})),
+        el("span", {class: "u-hvorfor"},
+          ...g.for.slice(0, 2).map(t => el("span", {class: "for", text: t})),
+          ...g.mot.slice(0, 1).map(t => el("span", {class: "mot", text: t}))));
+      rad.addEventListener("click", () => velg(c, true));
+      if (c.nokkel === tilst.valgt) rad.classList.add("valgt");
+      return rad;
+    }));
+    if (!v.length) liste.append(el("div", {class: "tom", text: "Ingen kandidater passer filtrene. Slå på flere vurderinger eller senk kravene."}));
+  }
+
+  function oppdater() {
+    const v = synlige();
+    tegnKart(v); tegnListe(v);
+    const valgt = v.find(c => c.nokkel === tilst.valgt) || v[0] || null;
+    velg(valgt, false);
+  }
+  oppdater();
 }
 
 function kandidaterFane() {
@@ -775,7 +1065,7 @@ async function start() {
     return;
   }
   document.getElementById("generert").textContent = "Oppdatert " + D.generert.replace("T", " ").slice(0, 16);
-  kandidaterFane(); aksjescoreFane(); simuleringFane(); oversikt(); hjerneFane(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
+  utvalgFane(); kandidaterFane(); aksjescoreFane(); simuleringFane(); oversikt(); hjerneFane(); handlerFane(); backtestFane(); nyheterFane(); driftFane();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
     const knapp = document.getElementById("varselknapp");

@@ -53,6 +53,11 @@ SETNING = {
     "innside.verdi=100k-1M": "at kjøpet er på mellom 100 000 kroner og 1 million",
     "innside.verdi=<100k": "at kjøpet er lite (under 100 000 kroner)",
     "kontekst.emisjon90=ja": "at selskapet har hentet penger i en emisjon nylig",
+    "innside.rolle=ceo/cfo": "at det er toppleder eller finansdirektør som kjøper",
+    "innside.rolle=styre": "at det er et styremedlem som kjøper",
+    "innside.rolle=styreleder": "at det er styrelederen som kjøper",
+    "innside.rolle=ledelse": "at det er en i ledelsen som kjøper",
+    "innside.rolle=nærstående/ukjent": "at kjøperen er nærstående eller har ukjent rolle",
 }
 FILTER = {
     "kurs.likviditet=lav": "aksjen omsettes for lite, så kurtasje og kursforskjell spiser gevinsten",
@@ -98,6 +103,30 @@ def _personer(tekst: str) -> str:
 
 def _liste(deler: list[str]) -> str:
     return deler[0] if len(deler) == 1 else ", ".join(deler[:-1]) + " og " + deler[-1]
+
+
+def _stor(t: str) -> str:
+    t = t.removeprefix("at ")
+    return t[:1].upper() + t[1:]
+
+
+def grunner(c: dict) -> dict:
+    """Korte grunner for og mot, til kort og lister: hjernens viktigste
+    bidrag (beste horisont) og aksjescorens viktigste faktorer."""
+    k, lg = c.get("kort") or {}, c.get("lang") or {}
+    h = lg if (lg.get("forventet") or -9) > (k.get("forventet") or -9) else k
+    bidrag = [b for b in (h.get("bidrag") or []) if abs(b[1]) >= 0.001]
+    for_ = [_stor(_faktor(b[0])) for b in bidrag if b[1] > 0][:3]
+    mot = [_stor(_faktor(b[0])) for b in bidrag if b[1] < 0][:2]
+    b = (c.get("aksjescore") or {}).get("bidrag") or {}
+    for x in (b.get("opp") or [])[:2]:
+        for_.append(f"{x['navn']}: {x['verdi']}")
+    for x in (b.get("ned") or [])[:1]:
+        mot.append(f"{x['navn']}: {x['verdi']}")
+    for_, mot = list(dict.fromkeys(for_)), list(dict.fromkeys(mot))
+    if c.get("filter"):
+        mot.insert(0, "Filtrert bort: " + (FILTER.get(c["filter"]) or ("svak aksjescore" if c["filter"].startswith("aksjescore") else c["filter"])))
+    return {"for": for_, "mot": mot}
 
 
 def tekst(c: dict) -> str:

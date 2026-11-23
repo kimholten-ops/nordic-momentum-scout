@@ -169,4 +169,5 @@ def ranger(
     for n, c in enumerate(ut, 1):
         c["rang"] = n
         c["forklaring"] = forklaring.tekst(c)
+        c["grunner"] = forklaring.grunner(c)
     return ut
