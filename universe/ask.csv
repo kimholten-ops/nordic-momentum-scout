@@ -1,0 +1,2 @@
+# Manuelle unntak for aksjesparekonto (se src/ask.py). status: ja | nei | mhf
+slug,status,merknad

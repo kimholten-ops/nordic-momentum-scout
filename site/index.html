@@ -300,7 +300,7 @@ function oversikt() {
     {navn: "Score", t: 1, vis: r => fmt(r.score, 1)},
     {navn: "Kjøpere", t: 1, vis: r => fmt(r.antall_personer)},
     {navn: "Verdi (NOK)", t: 1, vis: r => fmt(r.verdi_nok)},
-  ], D.signaler.slice(0, 15), "Ingen signaler ennå."));
+  ], D.signaler.filter(askOk).slice(0, 15), "Ingen signaler ennå."));
   s.append(el("p", {class: "under", text: "Alt her er papirhandel og læring, ikke kjøpsråd."}));
 }
 
@@ -413,6 +413,9 @@ function svg(tag, attrs, ...barn) {
 const ANB_FARGE = {"kjøp": "var(--pos)", "følg med": "var(--gul)", "nøytral": "var(--dempet)", "unngå": "var(--neg)"};
 const ANB_TEKST = {"kjøp": "Kjøp", "følg med": "Følg med", "nøytral": "Nøytral", "unngå": "Unngå"};
 const BORS_TEKST = {OL: "Oslo", ST: "Stockholm", HE: "Helsingfors", CO: "København", US: "USA"};
+// Aksjesparekonto: bare aksjer som kan kjøpes på ASK vises som standard (src/ask.py).
+const askOk = (x) => !D.ask || !D.ask.fokus || x.ask == null || x.ask === "ja" || x.ask === "ukjent"
+  || (x.ask === "Growth/First North" && D.ask.mhf);
 const bestH = (c) => ((c.lang || {}).forventet ?? -9) > ((c.kort || {}).forventet ?? -9) ? c.lang : c.kort;
 const aScore = (c) => c.aksjescore ? Math.round(c.aksjescore.persentil * 100) : null;
 
@@ -449,7 +452,8 @@ function utvalgFane() {
   const regime = (alle.find(c => (c.egenskaper || {})["kurs.regime"]) || {egenskaper: {}}).egenskaper["kurs.regime"];
   s.append(el("p", {class: "u-sammen", text:
     `${alle.length} aktuelle kandidater: ${ant("kjøp")} kjøp, ${ant("følg med")} å følge med, ${ant("nøytral")} nøytrale, ${ant("unngå")} å unngå` +
-    (filtrert ? `, og ${filtrert} som er filtrert bort` : "") + "." + (regime && regime !== "ukjent" ? ` Børsen er i en ${regime.replace("marked", "trend")}.` : "")}));
+    (filtrert ? `, og ${filtrert} som er filtrert bort` : "") + "." + (regime && regime !== "ukjent" ? ` Børsen er i en ${regime.replace("marked", "trend")}.` : "")
+    + (D.ask && D.ask.fokus ? " Bare aksjer som kan kjøpes på aksjesparekonto er med." : "")}));
 
   // Tilstand
   const tilst = {anb: new Set(["kjøp", "følg med", "nøytral", "unngå"]), bors: new Set(), kilde: "", visFiltrert: false,
@@ -676,6 +680,7 @@ function aksjescoreFane() {
     el("li", {text: "Hver aksje får en score hver uke ut fra kurs, volum, rapporter, innsidere, short, utbytte og sektor. Scoren sier hvordan aksjen rangeres mot de andre i samme region (Norden eller USA) — 90 betyr «bedre enn 90 % av aksjene», ikke 90 % sjanse for gevinst."}),
     el("li", {text: "Forventet 20 d: hvordan aksjene i samme tidel faktisk gjorde det mot børsen de neste 20 handelsdagene, målt på data modellen ikke hadde sett (2024 →). Før kurtasje."}),
     el("li", {text: "Hva trekker opp/ned: egenskapene som flyttet scoren mest for akkurat denne aksjen."}),
+    el("li", {text: "Som standard vises bare aksjer du kan kjøpe på aksjesparekonto hos Nordnet: børsnoterte selskaper hjemmehørende i EØS. Selskaper registrert på Bermuda, Singapore og lignende, og aksjer på Euronext Growth og First North, er skjult. Velg «Hele Norden» eller «USA» for å se resten."}),
     el("li", {text: "Norden: modellen er best til å peke ut aksjer som bør unngås (nederste tideler). Kandidater i nederste tredjedel filtreres bort på Kandidater-siden."}),
     el("li", {text: "USA: universet er dagens 500 mest omsatte aksjer over 1 mrd. USD. Aksjer som har gått konkurs eller krympet er ikke med i historikken, så modellen kan ha lært at «kraftig falne, volatile aksjer kommer tilbake» fordi taperne mangler. Les USA-scoren med stor skepsis."}))));
   // Kvalitet per region
@@ -691,9 +696,9 @@ function aksjescoreFane() {
         el("div", {class: "tidelakse"}, ...t.map(x => el("span", {text: x.tidel}))))));
   }
   // Filter
-  let region = "alle", sok = "";
+  let region = "ask", sok = "";
   const valg = el("div", {class: "chipvalg"});
-  const knapper = [["alle", "Alle"], ["Norden", "Norden"], ["USA", "USA"], ["mine", "Mine"]].map(([k, n]) => {
+  const knapper = [["ask", "Kan kjøpes på ASK"], ["Norden", "Hele Norden"], ["USA", "USA"], ["mine", "Mine"]].map(([k, n]) => {
     const b = el("button", {"aria-pressed": k === region, text: n});
     b.addEventListener("click", () => { region = k; knapper.forEach(x => x.setAttribute("aria-pressed", x === b)); tegn(); });
     return b;
@@ -706,13 +711,13 @@ function aksjescoreFane() {
   s.append(ramme);
   const faktorer = (l, kl) => el("div", {}, ...(l || []).map(f => el("div", {class: "faktor " + kl}, el("b", {text: f.navn}), " " + f.verdi)));
   function tegn() {
-    const rader = P.score.filter(r => (region === "alle" || (region === "mine" ? r.mine : r.region === region))
+    const rader = P.score.filter(r => (region === "ask" ? r.region === "Norden" && askOk(r) : region === "mine" ? r.mine : r.region === region)
       && (!sok || (r.navn + " " + r.yahoo).toLowerCase().includes(sok))).slice(0, 300);
     if (!rader.length) { ramme.replaceChildren(el("div", {class: "tabellramme"}, el("div", {class: "tom", text: "Ingen aksjer passer filteret."}))); return; }
     const hode = el("tr", {}, ...[["Aksje", ""], ["Score", "t"], ["Forventet 20 d", "t"], ["Trekker opp", ""], ["Trekker ned", ""]]
       .map(([n, k]) => el("th", {class: k, text: n})));
     const kropp = rader.map(r => el("tr", {class: r.mine ? "mine" : ""},
-      el("td", {}, el("div", {class: "navn", text: r.navn}), el("div", {class: "tick", text: `${r.yahoo} · ${r.region}${r.mine ? " · din" : ""}`})),
+      el("td", {}, el("div", {class: "navn", text: r.navn}), el("div", {class: "tick", text: `${r.yahoo} · ${r.region}${r.mine ? " · din" : ""}${r.region === "Norden" && !askOk(r) ? " · ikke ASK" : ""}`})),
       el("td", {class: "t"}, el("b", {text: Math.round(r.persentil * 100)}), el("div", {class: "bar"}, el("i", {style: `width:${r.persentil * 100}%`}))),
       el("td", {class: "t " + klasse(r.forventet_mer), text: pst(r.forventet_mer)}),
       el("td", {}, faktorer(r.opp, "pos")), el("td", {}, faktorer(r.ned, "neg"))));
@@ -938,7 +943,7 @@ function handlerFane() {
   const boks = el("div", {});
   const tegn = () => {
     const q = sok.value.trim().toLowerCase();
-    const rader = D.handler.filter(h =>
+    const rader = D.handler.filter(h => askOk(h) &&
       (!retn.value || h.retning === retn.value) && (!rolle.value || h.rolle === rolle.value) &&
       (!q || (h.selskap || "").toLowerCase().includes(q) || (h.person || "").toLowerCase().includes(q)));
     boks.replaceChildren(tabell([
@@ -986,7 +991,7 @@ function nyheterFane() {
     {navn: "Kategori", vis: r => r.kategori},
     {navn: "Retning", vis: r => r.retning, kl: r => r.retning === "positiv" ? "pos" : r.retning === "negativ" ? "neg" : ""},
     {navn: "Overr.", t: 1, vis: r => fmt(r.overraskelse)},
-  ], D.nyheter, "Ingen klassifiserte nyheter ennå."));
+  ], D.nyheter.filter(askOk), "Ingen klassifiserte nyheter ennå."));
 }
 
 function driftFane() {

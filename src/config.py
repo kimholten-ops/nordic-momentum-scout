@@ -158,6 +158,16 @@ HJERNE_VARSLE = env("HJERNE_VARSLE", "1") == "1"
 # tildeling/opsjon/feil som slapp gjennom).
 HJERNE_UTELAT = [("kurs.likviditet", "lav"), ("innside.kurs_vs_innsider", "ukjent")]
 
+# Aksjesparekonto (src/ask.py): fokus på aksjer som kan kjøpes på ASK hos
+# Nordnet. Andre aksjer (utenfor EØS, Euronext Growth/First North, USA)
+# samles fortsatt inn og brukes til læring, men varsles, papirhandles og
+# vises ikke som kandidater. ASK_MHF=1 når Growth/First North blir lov på
+# ASK (foreslått fra 1.1.2027 i statsbudsjettet).
+ASK_FOKUS = env("ASK_FOKUS", "1") == "1"
+ASK_MHF = env("ASK_MHF", "0") == "1"
+if ASK_FOKUS:
+    HJERNE_UTELAT += [("selskap.ask", "utenfor EØS")] + ([] if ASK_MHF else [("selskap.ask", "Growth/First North")])
+
 # Egenskaper som hentes og vises på dashboardet, men som modellen IKKE bruker.
 # Walk-forward-test nov. 2026: med alle nye kontekstegenskaper falt
 # rangkorrelasjonen fra 0,08 til 0,05 (mer støy enn signal med ~2 400
@@ -167,7 +177,7 @@ HJERNE_UTELAT = [("kurs.likviditet", "lav"), ("innside.kurs_vs_innsider", "ukjen
 HJERNE_EGENSKAPER_AV = [x for x in env(
     "HJERNE_EGENSKAPER_AV",
     "kontekst.rapport,kontekst.tilbakekjøp90,kurs.short,kurs.volatilitet,kurs.relstyrke20,selskap.sektor,kurs.størrelse",
-).split(",") if x]
+).split(",") if x] + ["selskap.ask"]  # ASK-status er et filter, ikke et signal
 
 # Faktormodellen (src/panel/): kandidater i Norden med aksjescore i nederste
 # tredjedel filtreres bort. Test 2024–26: innsidekjøp i svakeste tredjedel

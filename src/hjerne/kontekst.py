@@ -10,7 +10,7 @@ from bisect import bisect_left
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from src import marked
+from src import ask, marked
 
 # MFN-arkivet trenger litt historikk før «ingen rapport på 90 dager» betyr noe.
 OPPVARMING_DAGER = 100
@@ -31,6 +31,7 @@ class Kontekst:
     short: dict[str, tuple[list[str], list[float]]] = field(default_factory=dict)  # isin -> (datoer, prosent)
     short_start: str | None = None
     info: dict[str, tuple[str | None, float | None]] = field(default_factory=dict)  # yahoo -> (sektor, aksjer)
+    ask: dict[str, tuple[str, str]] = field(default_factory=dict)  # slug -> (status, forklaring), se src/ask.py
 
 
 def last(con) -> Kontekst:
@@ -52,6 +53,8 @@ def last(con) -> Kontekst:
     if "selskapsinfo" in tabeller:
         for r in con.execute("SELECT yahoo, sektor, aksjer FROM selskapsinfo"):
             k.info[r[0]] = (r[1], r[2])
+    if "selskaper" in tabeller:
+        k.ask = ask.beregn(con)
     return k
 
 
@@ -79,6 +82,10 @@ def egenskaper(k: Kontekst, kurser: dict[str, marked.Serie], slug: str, yahoo: s
         for type_, navn in (("tilbakekjop", "kontekst.tilbakekjøp90"), ("emisjon", "kontekst.emisjon90")):
             d = _dager_siden(k.hendelser.get((slug, type_), []), publisert)
             ut[navn] = "ja" if d is not None and d <= 90 else "nei"
+
+    # ASK: brukes som filter (HJERNE_UTELAT), ikke av modellen.
+    if k.ask:
+        ut["selskap.ask"] = k.ask.get(slug, (ask.UKJENT, ""))[0]
 
     # 2) Yahoo: sektor og børsverdi dagen før inngang.
     sektor, aksjer = k.info.get(yahoo, (None, None))
