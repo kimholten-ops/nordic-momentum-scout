@@ -12,8 +12,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from src import db, innside_backtest
-from src.config import INDEKSER, ROOT, TZ, env
+from src import ask, db, innside_backtest
+from src.config import ASK_FOKUS, ASK_MHF, INDEKSER, ROOT, TZ, env
 from src.innside.kjor import EKSTRAKSJON_VERSJON
 from src.innside.signal import SIGNAL_VERSJON, TERSKEL, VINDU_DAGER
 
@@ -109,6 +109,15 @@ def bygg(con) -> dict:
         if rader:
             r4 = lambda v: round(v, 4) if v is not None else None
             kurser[sym] = {k: [r4(r[k]) if k != "dato" else r[k] for r in rader] for k in ("dato", "open", "high", "low", "close")}
+    # ASK-status per selskap og Yahoo-symbol, så appen kan vise bare det som
+    # kan kjøpes på aksjesparekonto.
+    ask_slug = ask.beregn(con)
+    ask_yahoo = ask.per_yahoo(con)
+    for liste in (signaler, handler, nyheter):
+        for r in liste:
+            r["ask"] = ask_slug.get(r["slug"], (ask.UKJENT, ""))[0]
+    for f in hjerne["forslag"]:
+        f["ask"] = ask_slug.get(f["slug"], (ask.UKJENT, ""))[0]
     panel = {"status": {}, "score": []}
     if con.execute("SELECT name FROM sqlite_master WHERE name = 'panel_score'").fetchone():
         import csv
@@ -128,6 +137,7 @@ def bygg(con) -> dict:
                 "yahoo": r["yahoo"], "navn": navn.get(r["yahoo"]) or u.get("navn") or r["yahoo"], "region": r["region"],
                 "mine": u.get("mine") == "1", "persentil": round(r["persentil"], 3), "tidel": r["tidel"],
                 "forventet_mer": r["forventet_mer"], "kostnad": r["kostnad"], **json.loads(r["bidrag"] or "{}"),
+                "ask": (ask.UTENFOR if r["region"] != "Norden" else ask_yahoo.get(r["yahoo"], (ask.UKJENT, ""))[0]),
             })
     siste_poll = con.execute(
         "SELECT MAX(tidspunkt) FROM kjorelogg WHERE jobb = 'poll_news' AND status = 'ok'"
@@ -147,6 +157,7 @@ def bygg(con) -> dict:
         "webpush_public": env("WEBPUSH_VAPID_PUBLIC", ""),
         "kurser": kurser,
         "panel": panel,
+        "ask": {"fokus": ASK_FOKUS, "mhf": ASK_MHF},
     }
 
 

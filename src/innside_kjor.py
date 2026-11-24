@@ -9,8 +9,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from src import db
-from src.config import INNSIDE_MAKS_LLM_KALL, INNSIDE_VARSLE
+from src import ask, db
+from src.config import ASK_FOKUS, INNSIDE_MAKS_LLM_KALL, INNSIDE_VARSLE
 from src.innside import kjor as ekstraksjon
 from src.innside import signal
 from src.notify import send
@@ -22,7 +22,12 @@ def kjor(maks_llm_kall: int = INNSIDE_MAKS_LLM_KALL, varsle: bool = INNSIDE_VARS
         nye = signal.bygg_signaler(con)
         varslet = 0
         if varsle:
+            status = ask.beregn(con) if ASK_FOKUS else {}
             for s in signal.ikke_varslede(con):
+                if not ask.ok(status.get(s["selskap_slug"], (None,))[0]):
+                    # Kan ikke kjøpes på ASK: lagres og vises, men varsles ikke (varslet = 2).
+                    con.execute("UPDATE innside_signaler SET varslet = 2 WHERE id = ?", (s["id"],))
+                    continue
                 if send(signal.formater_varsel(con, s)):
                     con.execute("UPDATE innside_signaler SET varslet = 1 WHERE id = ?", (s["id"],))
                     varslet += 1

@@ -62,6 +62,8 @@ SETNING = {
 FILTER = {
     "kurs.likviditet=lav": "aksjen omsettes for lite, så kurtasje og kursforskjell spiser gevinsten",
     "innside.kurs_vs_innsider=ukjent": "vi vet ikke hvilken kurs innsideren betalte (ofte tildeling eller opsjoner)",
+    "selskap.ask=utenfor EØS": "selskapet er hjemmehørende utenfor EØS og kan ikke kjøpes på aksjesparekonto",
+    "selskap.ask=Growth/First North": "aksjen handles på Euronext Growth/First North og kan ikke ligge på aksjesparekonto ennå",
 }
 
 
