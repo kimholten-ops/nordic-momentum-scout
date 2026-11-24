@@ -5,7 +5,9 @@
 Testen venter til grafikkortet er ledig: så lenge ComfyUI (port 8188) har
 jobber i kø, står den og venter, og den starter først når køen har vært tom i
 10 minutter. Da blir ikke nattfabrikken forstyrret, og tidsmålingene blir
-riktige. Bruk --nå for å starte med en gang.
+riktige. Bruk --nå (eller --na) for å starte med en gang: da tømmes
+ComfyUI-køen, pågående bilde avbrytes og andre Ollama-modeller lastes ut,
+slik at testen har grafikkortet for seg selv.
 
 Rapportene står i scripts/modelltest_utvalg.json (valgt tilfeldig, ulike
 børser og språk). Svarene og tiden per rapport skrives til
@@ -46,6 +48,28 @@ def _comfy_jobber() -> int:
     return len(q.get("queue_running") or []) + len(q.get("queue_pending") or [])
 
 
+def frigjor_gpu(beholdes: list[str]) -> None:
+    """Tøm ComfyUI-køen, avbryt pågående jobb og last ut andre Ollama-modeller."""
+    import requests
+
+    from src.config import OLLAMA_URL
+
+    try:
+        requests.post(COMFY, json={"clear": True}, timeout=5)
+        requests.post(COMFY.replace("/queue", "/interrupt"), timeout=5)
+        requests.post(COMFY.replace("/queue", "/free"), json={"unload_models": True, "free_memory": True}, timeout=10)
+        print("ComfyUI: køen er tømt og modellene lastet ut av grafikkortet.", flush=True)
+    except Exception:  # noqa: BLE001 - ComfyUI kjører ikke
+        pass
+    try:
+        for m in requests.get(f"{OLLAMA_URL}/api/ps", timeout=5).json().get("models") or []:
+            if m["name"] not in beholdes:
+                requests.post(f"{OLLAMA_URL}/api/generate", json={"model": m["name"], "keep_alive": 0}, timeout=30)
+                print(f"Ollama: lastet ut {m['name']}.", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"Ollama: fikk ikke sjekket lastede modeller ({e}).", flush=True)
+
+
 def vent_paa_ledig_gpu(rolig_min: int = ROLIG_MIN, sov=time.sleep, jobber=_comfy_jobber) -> None:
     rolig = 0
     meldt = False
@@ -68,9 +92,11 @@ def vent_paa_ledig_gpu(rolig_min: int = ROLIG_MIN, sov=time.sleep, jobber=_comfy
 
 def main() -> int:
     args = [a for a in sys.argv[1:] if a not in ("--nå", "--na")]
+    modeller = args or ["qwen2.5:7b", "qwen3:14b", "gemma3:12b"]
     if len(args) == len(sys.argv[1:]):
         vent_paa_ledig_gpu()
-    modeller = args or ["qwen2.5:7b", "qwen3:14b", "gemma3:12b"]
+    else:
+        frigjor_gpu(modeller)
     saker = json.loads(UTVALG.read_text(encoding="utf-8"))
     tekster = json.loads(TEKST.read_text(encoding="utf-8")) if TEKST.exists() else {}
     for s in saker:
