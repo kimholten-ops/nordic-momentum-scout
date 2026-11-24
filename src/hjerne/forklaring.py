@@ -74,6 +74,10 @@ def _pst(x: float | None, fortegn: bool = True) -> str:
     return t.replace(".", ",").replace("-", "−") + " %"
 
 
+def _pst1(x: float) -> str:
+    return f"{x * 100:.1f}".replace(".", ",") + " %"
+
+
 def _kr(x: float | None) -> str:
     if not x:
         return "–"
@@ -125,6 +129,11 @@ def grunner(c: dict) -> dict:
         for_.append(f"{x['navn']}: {x['verdi']}")
     for x in (b.get("ned") or [])[:1]:
         mot.append(f"{x['navn']}: {x['verdi']}")
+    x = (c.get("naa") or {}).get("siden_melding")
+    if x is not None and x >= 0.02:
+        for_.insert(0, f"Kursen har steget {_pst1(x)} etter meldingen")
+    elif x is not None and x <= -0.02:
+        mot.insert(0, f"Kursen har falt {_pst1(-x)} etter meldingen")
     for_, mot = list(dict.fromkeys(for_)), list(dict.fromkeys(mot))
     if c.get("filter"):
         mot.insert(0, "Filtrert bort: " + (FILTER.get(c["filter"]) or ("svak aksjescore" if c["filter"].startswith("aksjescore") else c["filter"])))
@@ -196,4 +205,12 @@ def tekst(c: dict) -> str:
             setn.append(f"Kursen har steget {_pst(x, False)} siden første mulige kjøpsdag, så noe av gevinsten kan allerede være tatt ut.")
         elif x <= -0.01:
             setn.append(f"Kursen har falt {_pst(-x, False)} siden første mulige kjøpsdag.")
+    naa = c.get("naa") or {}
+    if naa.get("siden_melding") is not None:
+        x = naa["siden_melding"]
+        nivaa = f"siste kurs {_kr(naa.get('kurs'))} kl. {naa.get('tid')}"
+        if abs(x) < 0.005:
+            setn.append(f"Kursen har knapt rørt seg etter meldingen ({nivaa}).")
+        else:
+            setn.append(f"Etter meldingen har kursen {'steget' if x > 0 else 'falt'} {_pst1(abs(x))} ({nivaa}).")
     return " ".join(setn)

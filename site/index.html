@@ -535,6 +535,8 @@ function utvalgFane() {
         g.for.length ? el("ul", {class: "for", "aria-label": "Taler for"}, ...g.for.map(t => el("li", {text: t}))) : null,
         g.mot.length ? el("ul", {class: "mot", "aria-label": "Taler mot"}, ...g.mot.map(t => el("li", {text: t}))) : null),
       el("dl", {class: "u-plan"},
+        ...(c.naa ? [el("dt", {text: `Kurs kl. ${c.naa.tid}`}), el("dd", {text: `${kr(c.naa.kurs)}, ${pst(c.naa.dag)} i dag`
+          + (c.naa.siden_melding != null ? `, ${pst(c.naa.siden_melding)} etter meldingen` : "")})] : []),
         el("dt", {text: "Kjøp for inntil"}), el("dd", {text: `${kr(c.limit)} ved åpning ${datoKort(c.inn_dato)}`}),
         el("dt", {text: "Mål"}), el("dd", {text: `${kr(h.maal)} innen ${datoKort(h.ut_dato)}`}),
         el("dt", {text: "Stopp"}), el("dd", {text: kr(c.stopp)}),
