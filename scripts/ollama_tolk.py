@@ -49,6 +49,7 @@ from src.sources import mfn  # noqa: E402
 UT = ROOT / "data" / "ollama" / "tolkninger.jsonl"
 UT_KL = ROOT / "data" / "ollama" / "klassifiseringer.jsonl"
 UT_RAP = ROOT / "data" / "ollama" / "rapporter.jsonl"
+UT_TEST = ROOT / "data" / "ollama" / "modelltest.jsonl"
 
 
 def ko(con) -> list[dict]:
@@ -158,7 +159,8 @@ def ferdige(fil: Path = UT, nokkel: str = "url", versjon: str | None = None) -> 
 
 
 GREN = "ollama-tolkninger"
-I_GREN = ("data/ollama/tolkninger.jsonl", "data/ollama/klassifiseringer.jsonl", "data/ollama/rapporter.jsonl")
+I_GREN = ("data/ollama/tolkninger.jsonl", "data/ollama/klassifiseringer.jsonl", "data/ollama/rapporter.jsonl",
+          "data/ollama/modelltest.jsonl")
 
 
 def git(*args: str, env: dict | None = None) -> str | None:
@@ -178,7 +180,7 @@ def push(antall: int) -> None:
     env = {"GIT_INDEX_FILE": indeks}
     if git("read-tree", "--empty", env=env) is None:
         return
-    for lokal, i_gren in zip((UT, UT_KL, UT_RAP), I_GREN):
+    for lokal, i_gren in zip((UT, UT_KL, UT_RAP, UT_TEST), I_GREN):
         if not lokal.exists():
             continue
         blob = git("hash-object", "-w", str(lokal))

@@ -92,15 +92,15 @@ def valider(d: dict) -> dict:
     return ut
 
 
-def tolk(tittel: str, tekst: str) -> dict:
-    r = requests.post(
-        f"{OLLAMA_URL.rstrip('/')}/api/chat",
-        json={"model": OLLAMA_MODELL, "stream": False, "format": "json",
-              "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
-              "messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                           {"role": "user", "content": bygg_prompt(tittel, tekst)}]},
-        timeout=600,
-    )
+def tolk(tittel: str, tekst: str, modell: str | None = None) -> dict:
+    modell = modell or OLLAMA_MODELL
+    kropp = {"model": modell, "stream": False, "format": "json",
+             "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
+             "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                          {"role": "user", "content": bygg_prompt(tittel, tekst)}]}
+    if modell.startswith(("qwen3", "deepseek-r1", "gpt-oss")):
+        kropp["think"] = False  # «tenke høyt» gjør uthenting mye tregere uten å hjelpe
+    r = requests.post(f"{OLLAMA_URL.rstrip('/')}/api/chat", json=kropp, timeout=600)
     r.raise_for_status()
     return valider(json.loads(r.json().get("message", {}).get("content", "") or "{}"))
 
