@@ -1,6 +1,7 @@
 """Legger tolkninger fra data/ollama/tolkninger.jsonl inn i databasen.
 
-Kjøres av workflowen «Importer Ollama-tolkninger» når filen pushes. Idempotent:
+Kjøres av workflowen «Importer Ollama-tolkninger» (alt) og av hver nyhetsrunde
+med --siden-timer 24 (bare det vakten på PC-en har tolket nylig). Idempotent:
 meldinger som allerede er ferdig behandlet, røres ikke. Selskaper som får sitt
 første innsidekjøp her, legges i universet med tickeren MFN oppga.
 """
@@ -8,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src import db
 from src.config import ROOT, TZ
@@ -25,6 +26,22 @@ FIL_RAP = ROOT / "data" / "ollama" / "rapporter.jsonl"
 GREN_FILER = {FIL: "data/ollama/tolkninger.jsonl", FIL_KL: "data/ollama/klassifiseringer.jsonl",
               FIL_RAP: "data/ollama/rapporter.jsonl"}
 BORS = {".OL": "Oslo Børs", ".ST": "Stockholm", ".HE": "Helsinki", ".CO": "København"}
+SIDEN: str | None = None  # bare rader tolket etter dette (lokal tid, ISO), se --siden-timer
+
+
+def _linjer(fil) -> list[str]:
+    ut = []
+    for linje in fil.read_text(encoding="utf-8").splitlines():
+        if not linje.strip():
+            continue
+        if SIDEN:
+            try:
+                if (json.loads(linje).get("tid") or "") < SIDEN:
+                    continue
+            except ValueError:
+                continue
+        ut.append(linje)
+    return ut
 
 
 def _handel(d: dict) -> Handel | None:
@@ -42,9 +59,7 @@ def kjor(fil=FIL) -> dict:
     nye_selskaper: dict[str, dict] = {}
     with db.session() as con:
         last_universe(con)
-        for linje in fil.read_text(encoding="utf-8").splitlines():
-            if not linje.strip():
-                continue
+        for linje in _linjer(fil):
             stat["lest"] += 1
             rad = json.loads(linje)
             n = con.execute(
@@ -95,9 +110,7 @@ def kjor_klassifiseringer(fil=FIL_KL) -> dict:
         return stat
     na = datetime.now(TZ).isoformat(timespec="seconds")
     with db.session() as con:
-        for linje in fil.read_text(encoding="utf-8").splitlines():
-            if not linje.strip():
-                continue
+        for linje in _linjer(fil):
             stat["lest"] += 1
             rad = json.loads(linje)
             h = con.execute(
@@ -142,9 +155,7 @@ def kjor_rapporter(fil=FIL_RAP) -> dict:
     with db.session() as con:
         # Rader fra eldre promptversjoner fjernes; de tolkes på nytt.
         con.execute("DELETE FROM rapporttall WHERE modell NOT LIKE ?", (f"%|{rapport.VERSJON}",))
-        for linje in fil.read_text(encoding="utf-8").splitlines():
-            if not linje.strip():
-                continue
+        for linje in _linjer(fil):
             stat["lest"] += 1
             rad = json.loads(linje)
             if "resultat" not in rad or rad.get("versjon") != rapport.VERSJON:
@@ -187,6 +198,9 @@ def hent_fra_gren() -> None:
 
 
 if __name__ == "__main__":
+    if "--siden-timer" in sys.argv:
+        timer = float(sys.argv[sys.argv.index("--siden-timer") + 1])
+        SIDEN = (datetime.now(TZ) - timedelta(hours=timer)).replace(tzinfo=None).isoformat(timespec="seconds")
     if "--fra-gren" in sys.argv:
         hent_fra_gren()
     print("Innsidehandler:", kjor())

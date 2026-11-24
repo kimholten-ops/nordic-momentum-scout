@@ -57,6 +57,22 @@ def _horisont(m: Modell, eg: dict, h: int, inn: float, kost: float, inn_dato: da
     }
 
 
+def _reaksjon(publisert: str, forrige_close: float, nk: dict, siste_kursdag: str) -> float | None:
+    """Kursendring fra meldingen til siste kurs i dag. Meldinger før børsåpning
+    (eller etter gårsdagens stengning) måles fra forrige sluttkurs; meldinger i
+    børstiden fra kursen da meldingen kom."""
+    from src.intradag import kurs_ved
+
+    dag, tid = publisert[:10], publisert[11:16]
+    if dag == nk["dato"] and tid >= "09:00":
+        ref = kurs_ved(nk, tid) or forrige_close
+    elif dag > siste_kursdag or (dag == siste_kursdag and tid >= "16:20"):
+        ref = forrige_close
+    else:
+        return None  # eldre melding: se «hittil»
+    return nk["sist"] / ref - 1 if ref else None
+
+
 def regelsjekk(eg: dict[str, str]) -> dict:
     """Den enkle regelstrategien fra analysen: likvid, ingen advarsel, minst
     ett plusstegn. Gjennomsiktig ved siden av modellen."""
@@ -75,8 +91,11 @@ def ranger(
     p_lang: Param,
     regelscore: dict[tuple[str, str], float] | None = None,
     panel: dict[str, dict] | None = None,
+    naa: dict[str, dict] | None = None,
 ) -> list[dict]:
-    """panel: siste aksjescore per Yahoo-symbol fra faktormodellen (src/panel)."""
+    """panel: siste aksjescore per Yahoo-symbol fra faktormodellen (src/panel).
+    naa: dagens kurser fra src/intradag.py; da regnes kjøpsgrense og stopp fra
+    siste kurs, og kursreaksjonen etter meldingen tas med."""
     if not kurser:
         return []
     siste_kursdag = max(s.datoer[-1] for s in kurser.values() if s.datoer)
@@ -102,6 +121,12 @@ def ranger(
         sist = s.close[-1]
         if not sist:
             continue
+        nk = (naa or {}).get(h.yahoo)
+        naa_info = None
+        if nk and nk["dato"] > siste_kursdag and nk.get("sist"):
+            sist = nk["sist"]
+            naa_info = {"kurs": sist, "tid": nk["tid"], "dato": nk["dato"], "dag": sist / s.close[-1] - 1,
+                        "siden_melding": _reaksjon(h.publisert, s.close[-1], nk, siste_kursdag)}
         i = s.indeks_etter(h.publisert[:10])
         if i >= len(s.datoer):
             status, dag_nr, inngang_faktisk, hittil = "venter", 0, None, None
@@ -156,7 +181,7 @@ def ranger(
             "egenskaper": h.egenskaper,
             "regelscore": (regelscore or {}).get((h.slug, h.publisert[:10])),
             "filter": filt, "regelsjekk": regelsjekk(h.egenskaper), "aksjescore": ps,
-            "ask": h.egenskaper.get("selskap.ask"),
+            "ask": h.egenskaper.get("selskap.ask"), "naa": naa_info,
         })
     # Én rad per selskap: den nyeste hendelsen, med antall hendelser i perioden.
     per_selskap: dict[str, dict] = {}

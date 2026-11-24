@@ -108,6 +108,61 @@ def ko_rapporter(con) -> list[dict]:
     return ut
 
 
+class OllamaNede(RuntimeError):
+    pass
+
+
+def _nede(e: Exception) -> bool:
+    return "Connection" in type(e).__name__ and "11434" in str(e)
+
+
+def tolk_innside_rad(r: dict) -> dict:
+    """Én innsidemelding -> rad til tolkninger.jsonl. Kaster OllamaNede."""
+    rad = {"url": r["url"], "modell": OLLAMA_MODELL, "tid": datetime.now().isoformat(timespec="seconds")}
+    try:
+        tekst = mfn.hent_brodtekst(r["url"])
+        rad["handler"] = [asdict(h) for h in llm.trekk_ut(r["tittel"], tekst or "", r["publisert"])]
+    except KlassifiseringsFeil as e:
+        rad["feil"] = str(e)[:300]
+    except Exception as e:  # noqa: BLE001 — nett, MFN: noter og fortsett
+        if _nede(e):
+            raise OllamaNede(str(e)) from e
+        rad["feil"] = f"{type(e).__name__}: {e}"[:300]
+    return rad
+
+
+def tolk_nyhet_rad(r: dict) -> dict:
+    """Én børsmelding -> rad til klassifiseringer.jsonl. Kaster OllamaNede."""
+    from src.klassifisering import llm as kl
+
+    rad = {"url": r["url"], "modell": OLLAMA_MODELL, "tid": datetime.now().isoformat(timespec="seconds")}
+    try:
+        tekst = r.get("brodtekst") or mfn.hent_brodtekst(r["url"])
+        rad["resultat"] = kl.klassifiser(r["tittel"], tekst or "", r["publisert"])
+    except KlassifiseringsFeil as e:
+        rad["feil"] = str(e)[:300]
+    except Exception as e:  # noqa: BLE001
+        if _nede(e):
+            raise OllamaNede(str(e)) from e
+        rad["feil"] = f"{type(e).__name__}: {e}"[:300]
+    return rad
+
+
+def tolk_rapport_rad(r: dict) -> dict:
+    """Én kvartalsrapport -> rad til rapporter.jsonl. Kaster OllamaNede."""
+    from src import rapport
+
+    rad = {"group_id": r["group_id"], "url": r["url"], "slug": r["slug"], "publisert": r["publisert"],
+           "versjon": rapport.VERSJON, "modell": OLLAMA_MODELL, "tid": datetime.now().isoformat(timespec="seconds")}
+    try:
+        rad["resultat"] = rapport.tolk(r["tittel"] or "", mfn.hent_brodtekst(r["url"]) or "")
+    except Exception as e:  # noqa: BLE001 — nett, MFN, ugyldig svar: noter og fortsett
+        if _nede(e):
+            raise OllamaNede(str(e)) from e
+        rad["feil"] = f"{type(e).__name__}: {e}"[:300]
+    return rad
+
+
 def tolk_rapporter(maks: int | None, push_hver: int) -> int:
     from src import rapport
 
@@ -119,15 +174,11 @@ def tolk_rapporter(maks: int | None, push_hver: int) -> int:
     start, nye = time.time(), 0
     with UT_RAP.open("a", encoding="utf-8") as f:
         for k, r in enumerate(kø, 1):
-            rad = {"group_id": r["group_id"], "url": r["url"], "slug": r["slug"], "publisert": r["publisert"],
-                   "versjon": rapport.VERSJON, "modell": OLLAMA_MODELL, "tid": datetime.now().isoformat(timespec="seconds")}
             try:
-                rad["resultat"] = rapport.tolk(r["tittel"] or "", mfn.hent_brodtekst(r["url"]) or "")
-            except Exception as e:  # noqa: BLE001 — nett, MFN, ugyldig svar: noter og fortsett
-                rad["feil"] = f"{type(e).__name__}: {e}"[:300]
-                if "Connection" in type(e).__name__ and "11434" in str(e):
-                    print("Får ikke kontakt med Ollama på localhost:11434 — kjører «ollama serve»?")
-                    return 1
+                rad = tolk_rapport_rad(r)
+            except OllamaNede:
+                print("Får ikke kontakt med Ollama på localhost:11434 — kjører «ollama serve»?")
+                return 1
             f.write(json.dumps(rad, ensure_ascii=False) + "\n")
             f.flush()
             nye += 1
@@ -197,8 +248,6 @@ def push(antall: int) -> None:
 
 
 def tolk_nyheter(maks: int | None, push_hver: int) -> int:
-    from src.klassifisering import llm as kl
-
     with db.session() as con:
         kø = ko_nyheter(con)
     gjort = ferdige(UT_KL)
@@ -207,17 +256,11 @@ def tolk_nyheter(maks: int | None, push_hver: int) -> int:
     start, nye = time.time(), 0
     with UT_KL.open("a", encoding="utf-8") as f:
         for k, r in enumerate(kø, 1):
-            rad = {"url": r["url"], "modell": OLLAMA_MODELL, "tid": datetime.now().isoformat(timespec="seconds")}
             try:
-                tekst = r["brodtekst"] or mfn.hent_brodtekst(r["url"])
-                rad["resultat"] = kl.klassifiser(r["tittel"], tekst or "", r["publisert"])
-            except KlassifiseringsFeil as e:
-                rad["feil"] = str(e)[:300]
-            except Exception as e:  # noqa: BLE001
-                rad["feil"] = f"{type(e).__name__}: {e}"[:300]
-                if "Connection" in type(e).__name__ and "11434" in str(e):
-                    print("Får ikke kontakt med Ollama på localhost:11434 — kjører «ollama serve»?")
-                    return 1
+                rad = tolk_nyhet_rad(r)
+            except OllamaNede:
+                print("Får ikke kontakt med Ollama på localhost:11434 — kjører «ollama serve»?")
+                return 1
             f.write(json.dumps(rad, ensure_ascii=False) + "\n")
             f.flush()
             nye += 1
@@ -259,18 +302,11 @@ def main() -> int:
     start, nye = time.time(), 0
     with UT.open("a", encoding="utf-8") as f:
         for k, r in enumerate(kø, 1):
-            rad = {"url": r["url"], "modell": OLLAMA_MODELL, "tid": datetime.now().isoformat(timespec="seconds")}
             try:
-                tekst = mfn.hent_brodtekst(r["url"])
-                handler = llm.trekk_ut(r["tittel"], tekst or "", r["publisert"])
-                rad["handler"] = [asdict(h) for h in handler]
-            except KlassifiseringsFeil as e:
-                rad["feil"] = str(e)[:300]
-            except Exception as e:  # nett, MFN, Ollama nede: noter og fortsett
-                rad["feil"] = f"{type(e).__name__}: {e}"[:300]
-                if "Connection" in type(e).__name__ and "11434" in str(e):
-                    print("Får ikke kontakt med Ollama på localhost:11434 — kjører «ollama serve»?")
-                    return 1
+                rad = tolk_innside_rad(r)
+            except OllamaNede:
+                print("Får ikke kontakt med Ollama på localhost:11434 — kjører «ollama serve»?")
+                return 1
             f.write(json.dumps(rad, ensure_ascii=False) + "\n")
             f.flush()
             nye += 1

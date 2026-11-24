@@ -91,6 +91,21 @@ databasen lokalt). Workflowen **Importer Ollama-tolkninger** henter dem
 derfra annenhver time og legger dem inn i databasen.
 Regn med 5–30 sekunder per melding avhengig av maskinen.
 
+**Vakt i børstiden** (`scripts/vakt.py`): installeres én gang med
+`powershell -ExecutionPolicy Bypass -File scripts\installer_vakt.ps1` og starter
+så av seg selv hverdager kl. 07:55 (og ved innlogging) til 17:45. Hver
+nyhetsrunde i GitHub lager en liten arbeidskø (`scripts/arbeidsko.py`,
+vedlegget `arbeidsko.json` på releasen `data-siste`) med ferske meldinger som
+trenger språkmodell. Vakten henter den hvert annet minutt, tolker med Ollama
+og pusher svarene; neste nyhetsrunde importerer dem (`--siden-timer 24`),
+kjører hjernen og varsler. Fra børsmelding til varsel: omtrent 10–20 minutter.
+
+**Kurser gjennom dagen** (`src/intradag.py`): hver nyhetsrunde henter, høyst
+hvert 30. minutt i børstiden, 15-minutterskurser fra Yahoo (ca. 15 min
+forsinket) for ASK-aksjene. Kandidatene får kjøpsgrense og stopp fra siste
+kurs og kursreaksjonen etter meldingen; åpne papirhandler gir varsel når
+stoppen nås og påminnelse kl. 15:30 på planlagt salgsdag.
+
 ## Faktormodellen / aksjescore (src/panel/)
 
 Gir hver aksje (Norden + ca. 500 amerikanske i `universe/usa.csv`) en score

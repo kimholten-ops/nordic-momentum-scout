@@ -11,3 +11,4 @@ data/ollama/
 
 # Databasen ligger på releasen «data-siste» (scripts/db_lagring.py), ikke i git.
 data/momentum.db
+data/arbeidsko.json

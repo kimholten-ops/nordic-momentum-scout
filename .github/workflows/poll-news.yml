@@ -41,6 +41,12 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m src.poll_news
 
+      - name: Importer tolkninger fra vakten på PC-en
+        env:
+          MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
+          INNSIDE_LLM: "av"
+        run: python -m scripts.importer_tolkninger --fra-gren --siden-timer 24
+
       - name: Dedupliser og klassifiser
         env:
           MOMENTUM_UA: ${{ secrets.MOMENTUM_UA }}
@@ -59,6 +65,16 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m src.innside_kjor
 
+      - name: Kurser gjennom dagen (hvert 30. min, stoppvarsler)
+        continue-on-error: true
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WEBPUSH_VAPID_PRIVATE: ${{ secrets.WEBPUSH_VAPID_PRIVATE }}
+          WEBPUSH_SUBSCRIPTIONS: ${{ secrets.WEBPUSH_SUBSCRIPTIONS }}
+          WEBPUSH_KONTAKT: ${{ vars.WEBPUSH_KONTAKT }}
+        run: python -m src.intradag
+
       - name: Hjerne (lær, simuler, foreslå, varsle)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -70,7 +86,28 @@ jobs:
           HJERNE_VARSLE: ${{ vars.HJERNE_VARSLE || '1' }}
         run: python -m src.hjerne_kjor
 
+      - name: Arbeidskø til vakten på PC-en
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -m scripts.arbeidsko
+          python -m scripts.arbeidsko last-opp
+
       - name: Lagre databasen (release «data-siste»)
         env:
           GH_TOKEN: ${{ github.token }}
         run: python -m scripts.db_lagring last-opp
+
+      - name: Commit univers (nye selskaper fra innsidekjøp)
+        run: |
+          git config user.name "momentum-bot"
+          git config user.email "actions@github.com"
+          git add universe/tickers.csv
+          git diff --staged --quiet && echo "ingen endring" && exit 0
+          git commit -m "data: nye selskaper fra innsidekjøp $(date -u +'%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin ${{ github.ref_name }} && git push && exit 0
+            sleep 5
+          done
+          exit 1
