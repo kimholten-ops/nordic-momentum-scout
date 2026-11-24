@@ -2,6 +2,11 @@
 
   python -m scripts.modelltest qwen2.5:7b qwen3:14b gemma3:12b
 
+Testen venter til grafikkortet er ledig: så lenge ComfyUI (port 8188) har
+jobber i kø, står den og venter, og den starter først når køen har vært tom i
+10 minutter. Da blir ikke nattfabrikken forstyrret, og tidsmålingene blir
+riktige. Bruk --nå for å starte med en gang.
+
 Rapportene står i scripts/modelltest_utvalg.json (valgt tilfeldig, ulike
 børser og språk). Svarene og tiden per rapport skrives til
 data/ollama/modelltest.jsonl og pushes til grenen «ollama-tolkninger», så de
@@ -26,8 +31,46 @@ UT = ROOT / "data" / "ollama" / "modelltest.jsonl"
 TEKST = ROOT / "data" / "ollama" / "modelltest_tekster.json"
 
 
+COMFY = "http://127.0.0.1:8188/queue"
+ROLIG_MIN = 10
+
+
+def _comfy_jobber() -> int:
+    """Antall jobber som kjører eller venter i ComfyUI (0 hvis ComfyUI ikke kjører)."""
+    import requests
+
+    try:
+        q = requests.get(COMFY, timeout=5).json()
+    except Exception:  # noqa: BLE001 - ingen ComfyUI = ledig
+        return 0
+    return len(q.get("queue_running") or []) + len(q.get("queue_pending") or [])
+
+
+def vent_paa_ledig_gpu(rolig_min: int = ROLIG_MIN, sov=time.sleep, jobber=_comfy_jobber) -> None:
+    rolig = 0
+    meldt = False
+    while rolig < rolig_min:
+        n = jobber()
+        if n:
+            if not meldt or rolig:
+                print(f"{time.strftime('%H:%M')} Grafikkortet er opptatt (ComfyUI har {n} jobb(er)). "
+                      "Venter … (la vinduet stå åpent)", flush=True)
+                meldt = True
+            rolig = 0
+        else:
+            if rolig == 0 and meldt:
+                print(f"{time.strftime('%H:%M')} ComfyUI er ledig. Starter når det har vært rolig i "
+                      f"{rolig_min} minutter.", flush=True)
+            rolig += 1
+        if rolig < rolig_min:
+            sov(60)
+
+
 def main() -> int:
-    modeller = sys.argv[1:] or ["qwen2.5:7b", "qwen3:14b", "gemma3:12b"]
+    args = [a for a in sys.argv[1:] if a not in ("--nå", "--na")]
+    if len(args) == len(sys.argv[1:]):
+        vent_paa_ledig_gpu()
+    modeller = args or ["qwen2.5:7b", "qwen3:14b", "gemma3:12b"]
     saker = json.loads(UTVALG.read_text(encoding="utf-8"))
     tekster = json.loads(TEKST.read_text(encoding="utf-8")) if TEKST.exists() else {}
     for s in saker:
