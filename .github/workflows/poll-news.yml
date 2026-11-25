@@ -72,6 +72,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           WEBPUSH_VAPID_PRIVATE: ${{ secrets.WEBPUSH_VAPID_PRIVATE }}
           WEBPUSH_SUBSCRIPTIONS: ${{ secrets.WEBPUSH_SUBSCRIPTIONS }}
+          WEBPUSH_SUBSCRIPTIONS_EKSTRA: ${{ secrets.WEBPUSH_SUBSCRIPTIONS_EKSTRA }}
           WEBPUSH_KONTAKT: ${{ vars.WEBPUSH_KONTAKT }}
         run: python -m src.intradag
 
@@ -81,6 +82,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           WEBPUSH_VAPID_PRIVATE: ${{ secrets.WEBPUSH_VAPID_PRIVATE }}
           WEBPUSH_SUBSCRIPTIONS: ${{ secrets.WEBPUSH_SUBSCRIPTIONS }}
+          WEBPUSH_SUBSCRIPTIONS_EKSTRA: ${{ secrets.WEBPUSH_SUBSCRIPTIONS_EKSTRA }}
           WEBPUSH_KONTAKT: ${{ vars.WEBPUSH_KONTAKT }}
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
           HJERNE_VARSLE: ${{ vars.HJERNE_VARSLE || '1' }}

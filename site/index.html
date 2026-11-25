@@ -1043,7 +1043,7 @@ async function slaaPaaVarsler() {
     const felt = el("textarea", {readonly: "readonly"}); felt.value = json;
     const kopier = el("button", {class: "knapp", text: "Kopier"});
     kopier.addEventListener("click", async () => { try { await navigator.clipboard.writeText(json); kopier.textContent = "Kopiert ✓"; } catch { felt.select(); } });
-    vis(el("p", {text: "Varsler er tillatt på denne enheten. Siste steg: legg teksten under inn som GitHub-secret WEBPUSH_SUBSCRIPTIONS (flere enheter: lim dem inn som en liste [ {...}, {...} ]). Kjør så «Varslingstest»."}),
+    vis(el("p", {text: "Varsler er tillatt på denne enheten. Siste steg: send teksten under til den som eier appen. Den legges inn som GitHub-secret: WEBPUSH_SUBSCRIPTIONS for eierens egen telefon, eller WEBPUSH_SUBSCRIPTIONS_EKSTRA for andre personer (én tekst per linje). Kjør så «Varslingstest»."}),
         felt, el("div", {}, kopier));
   } catch (e) {
     vis(el("p", {text: "Klarte ikke å slå på varsler: " + e.message}));
