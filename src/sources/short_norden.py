@@ -56,13 +56,28 @@ def summer(hendelser: list[tuple[str, str, str, float]]) -> list[tuple[str, str,
     return ut
 
 
+def _get(url: str, forsok: int = 3) -> requests.Response:
+    """FI lukker iblant forbindelsen midt i nedlastingen; prøv igjen."""
+    import time
+
+    for i in range(forsok):
+        try:
+            r = requests.get(url, headers=UA, timeout=HTTP_TIMEOUT * 12)
+            r.raise_for_status()
+            return r
+        except requests.RequestException:
+            if i + 1 == forsok:
+                raise
+            time.sleep(10 * (i + 1))
+    raise RuntimeError("uventet")
+
+
 def hent_se() -> list[tuple[str, str, str, float]]:
     import pandas as pd
 
     rader = []
     for url in SE_FILER:
-        r = requests.get(url, headers=UA, timeout=HTTP_TIMEOUT * 6)
-        r.raise_for_status()
+        r = _get(url)
         df = pd.read_excel(io.BytesIO(r.content), engine="odf", header=5)
         df = df.iloc[:, :5]
         df.columns = ["aktor", "emittent", "isin", "pst", "dato"]
