@@ -18,6 +18,7 @@ Avslutter av seg selv etter VAKT_SLUTT. Kjører bare én vakt om gangen.
 """
 from __future__ import annotations
 
+import faulthandler
 import json
 import socket
 import subprocess
@@ -38,6 +39,27 @@ KO_URL = "https://github.com/kimholten-ops/nordic-momentum-scout/releases/downlo
 VAKT_START, VAKT_SLUTT = "07:45", "17:45"
 PAUSE_SEK = 120
 LAS_PORT = 47613  # én vakt om gangen
+LOGG = ROOT / "data" / "vakt.log"
+STATUS = ROOT / "data" / "vakt_status.json"
+HENG_SEK = 900  # skriv stakkspor til loggen hvis én runde henger lenger enn dette
+
+
+def logg(tekst: str) -> None:
+    """Til vinduet og til data/vakt.log (så vi kan se hva vakten gjorde)."""
+    print(tekst, flush=True)
+    try:
+        with LOGG.open("a", encoding="utf-8") as f:
+            f.write(f"{datetime.now(TZ).strftime('%Y-%m-%d')} {tekst}\n")
+    except OSError:
+        pass
+
+
+def status(**felt) -> None:
+    try:
+        STATUS.write_text(json.dumps({"tid": datetime.now(TZ).isoformat(timespec="seconds"), **felt},
+                                     ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _tid() -> str:
@@ -55,7 +77,7 @@ def hent_ko() -> dict | None:
         r.raise_for_status()
         return r.json()
     except Exception as e:  # noqa: BLE001
-        print(f"{_tid()} Fikk ikke hentet arbeidskøen: {e}", flush=True)
+        logg(f"{_tid()} Fikk ikke hentet arbeidskøen: {e}")
         return None
 
 
@@ -65,12 +87,12 @@ def ollama_klar() -> bool:
         return True
     except Exception:  # noqa: BLE001
         pass
-    print(f"{_tid()} Ollama svarer ikke — starter «ollama serve».", flush=True)
+    logg(f"{_tid()} Ollama svarer ikke — starter «ollama serve».")
     try:
         flagg = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flagg)
     except OSError as e:
-        print(f"{_tid()} Fant ikke ollama: {e}", flush=True)
+        logg(f"{_tid()} Fant ikke ollama: {e}")
         return False
     for _ in range(30):
         time.sleep(2)
@@ -116,13 +138,14 @@ def runde(ko: dict) -> int:
             if r[nokkel] in gjort:
                 continue
             t0 = time.time()
+            status(steg=f"tolker {navn}", nokkel=r[nokkel])
             rad = tolk(r)
             with fil.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rad, ensure_ascii=False) + "\n")
             gjort.add(r[nokkel])
             nye += 1
             hvem = r.get("selskap_slug") or r.get("slug") or ""
-            print(f"{_tid()} {tekst} {hvem[:28]:<28} {_oppsummer(navn, rad)}  ({time.time() - t0:.0f} s)", flush=True)
+            logg(f"{_tid()} {tekst} {hvem[:28]:<28} {_oppsummer(navn, rad)}  ({time.time() - t0:.0f} s)")
     return nye
 
 
@@ -140,26 +163,39 @@ def main() -> int:
         time.sleep(5)
         return 0
     ot.UT.parent.mkdir(parents=True, exist_ok=True)
-    print(f"Vakt startet {_tid()} med {OLLAMA_MODELL}. Sjekker hvert {PAUSE_SEK // 60}. minutt til {VAKT_SLUTT}. "
-          "La vinduet stå (det kan minimeres).", flush=True)
+    logg(f"Vakt startet {_tid()} med {OLLAMA_MODELL}. Sjekker hvert {PAUSE_SEK // 60}. minutt til {VAKT_SLUTT}. "
+         "La vinduet stå (det kan minimeres).")
+    heng = LOGG.open("a", encoding="utf-8")
     sist_laget = None
+    runder = 0
     while True:
+        faulthandler.cancel_dump_traceback_later()
+        faulthandler.dump_traceback_later(HENG_SEK, exit=False, file=heng)
+        runder += 1
+        status(steg="henter kø", runde=runder)
         ko = hent_ko()
         if ko and ko.get("laget") != sist_laget:
             if not ollama_klar():
-                print(f"{_tid()} Ollama er ikke tilgjengelig. Prøver igjen om litt.", flush=True)
+                logg(f"{_tid()} Ollama er ikke tilgjengelig. Prøver igjen om litt.")
             else:
                 try:
                     nye = runde(ko)
                     sist_laget = ko.get("laget")
                     if nye:
+                        status(steg="pusher", nye=nye)
                         ot.push(nye)
                 except ot.OllamaNede:
-                    print(f"{_tid()} Mistet kontakten med Ollama. Prøver igjen om litt.", flush=True)
+                    logg(f"{_tid()} Mistet kontakten med Ollama. Prøver igjen om litt.")
+                except Exception as e:  # noqa: BLE001 — vakten skal ikke dø av én feil
+                    logg(f"{_tid()} Feil i runden: {type(e).__name__}: {e}")
+        if runder % 15 == 0:
+            logg(f"{_tid()} Vakten går (runde {runder}).")
+        status(steg="venter", runde=runder, laget=(ko or {}).get("laget"))
         if en_gang or not i_vakttid():
             break
         time.sleep(PAUSE_SEK)
-    print(f"Vakten er ferdig for i dag ({_tid()}).")
+    faulthandler.cancel_dump_traceback_later()
+    logg(f"Vakten er ferdig for i dag ({_tid()}).")
     return 0
 
 
