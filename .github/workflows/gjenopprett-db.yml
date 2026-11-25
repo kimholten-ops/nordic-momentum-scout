@@ -1,0 +1,42 @@
+name: Gjenopprett databasen
+
+# Brukes hvis databasen på releasen «data-siste» er borte eller ødelagt:
+# legg en momentum.db.gz på en egen gren og kjør denne med grenens navn.
+# Laster den opp med den trygge opplastingen i scripts/db_lagring.py og
+# sletter grenen etterpå.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gren:
+        description: "Gren med momentum.db.gz i rota"
+        required: true
+
+concurrency:
+  group: momentum-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  gjenopprett:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Hent databasen fra grenen
+        run: |
+          git fetch -q origin "+refs/heads/${{ inputs.gren }}:refs/remotes/origin/${{ inputs.gren }}"
+          git show "origin/${{ inputs.gren }}:momentum.db.gz" > /tmp/momentum.db.gz
+          gunzip -c /tmp/momentum.db.gz > data/momentum.db
+          python -c "import sqlite3; c = sqlite3.connect('data/momentum.db'); print('integritet:', c.execute('PRAGMA integrity_check').fetchone()[0]); print('nyeste nyhet:', c.execute('SELECT MAX(publisert) FROM nyheter').fetchone()[0])"
+      - name: Last opp til releasen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m scripts.db_lagring last-opp
+      - name: Slett grenen
+        run: git push origin --delete "${{ inputs.gren }}"
