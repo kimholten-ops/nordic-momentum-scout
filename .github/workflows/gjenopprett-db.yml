@@ -32,7 +32,7 @@ jobs:
         run: |
           git fetch -q origin "+refs/heads/${{ inputs.gren }}:refs/remotes/origin/${{ inputs.gren }}"
           git show "origin/${{ inputs.gren }}:momentum.db.gz" > /tmp/momentum.db.gz
-          gunzip -c /tmp/momentum.db.gz > data/momentum.db
+          mkdir -p data && gunzip -c /tmp/momentum.db.gz > data/momentum.db
           python -c "import sqlite3; c = sqlite3.connect('data/momentum.db'); print('integritet:', c.execute('PRAGMA integrity_check').fetchone()[0]); print('nyeste nyhet:', c.execute('SELECT MAX(publisert) FROM nyheter').fetchone()[0])"
       - name: Last opp til releasen
         env:
