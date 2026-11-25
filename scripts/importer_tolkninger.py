@@ -23,8 +23,9 @@ from src.universe import last_universe
 FIL = ROOT / "data" / "ollama" / "tolkninger.jsonl"
 FIL_KL = ROOT / "data" / "ollama" / "klassifiseringer.jsonl"
 FIL_RAP = ROOT / "data" / "ollama" / "rapporter.jsonl"
+FIL_MED = ROOT / "data" / "ollama" / "medier.jsonl"
 GREN_FILER = {FIL: "data/ollama/tolkninger.jsonl", FIL_KL: "data/ollama/klassifiseringer.jsonl",
-              FIL_RAP: "data/ollama/rapporter.jsonl"}
+              FIL_RAP: "data/ollama/rapporter.jsonl", FIL_MED: "data/ollama/medier.jsonl"}
 BORS = {".OL": "Oslo Børs", ".ST": "Stockholm", ".HE": "Helsinki", ".CO": "København"}
 SIDEN: str | None = None  # bare rader tolket etter dette (lokal tid, ISO), se --siden-timer
 
@@ -197,6 +198,21 @@ def hent_fra_gren() -> None:
         print(f"Hentet {len(innhold.splitlines())} linjer fra {i_gren}.")
 
 
+def kjor_medier(fil=FIL_MED) -> dict:
+    if not fil.exists():
+        return {"lest": 0, "lagt_inn": 0}
+    from src import medietone
+
+    rader = []
+    for linje in _linjer(fil):
+        try:
+            rader.append(json.loads(linje))
+        except ValueError:
+            continue
+    with db.session() as con:
+        return medietone.importer(con, rader)
+
+
 if __name__ == "__main__":
     if "--siden-timer" in sys.argv:
         timer = float(sys.argv[sys.argv.index("--siden-timer") + 1])
@@ -206,4 +222,5 @@ if __name__ == "__main__":
     print("Innsidehandler:", kjor())
     print("Klassifiseringer:", kjor_klassifiseringer())
     print("Rapporttall:", kjor_rapporter())
+    print("Medietone:", kjor_medier())
     sys.exit(0)

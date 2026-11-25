@@ -41,9 +41,14 @@ NAVN = {
     "rapport_omsvekst": "Omsetningsvekst (siste rapport)", "rapport_marginendring": "Endring i driftsmargin",
     "rapport_epsvekst": "Vekst i resultat per aksje", "rapport_utsikter": "Utsikter (hevet/senket)",
     "rapport_tone": "Tone i rapporten",
+    "rav_driv_1m": "Råvarer/valuta siste måned (for denne aksjen)", "rav_driv_1u": "Råvarer/valuta siste uke",
+    "rav_gap_1m": "Etterslep mot råvarer/valuta", "rav_r2": "Hvor mye råvarer/valuta styrer aksjen",
+    "usa_sektor_1u": "Bransjen i USA siste uke", "usa_sektor_1m": "Bransjen i USA siste måned",
+    "usa_gap_1m": "Etterslep mot bransjen i USA",
 }
 PROSENT = {"rapport_omsvekst", "rapport_marginendring", "rapport_epsvekst", "mom_12_1", "mom_6_1", "mom_1m", "mom_1u", "fra_52u_topp", "over_52u_bunn", "vol_60", "over_ma200",
-           "rel_6m", "indeks_over_ma200", "indeks_1m", "utbytte_12m", "rapport_reaksjon", "drift_etter_rapport"}
+           "rel_6m", "indeks_over_ma200", "indeks_1m", "utbytte_12m", "rapport_reaksjon", "drift_etter_rapport",
+           "rav_driv_1m", "rav_driv_1u", "rav_gap_1m", "usa_sektor_1u", "usa_sektor_1m", "usa_gap_1m"}
 
 
 def region(marked: str) -> str:
@@ -62,8 +67,12 @@ def forbered(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def egenskaper(df: pd.DataFrame) -> list[str]:
-    return [c for c in df.columns if c not in IKKE_EGENSKAP and c != "region" and df[c].notna().any()]
+def egenskaper(df: pd.DataFrame, av: list[str] | None = None) -> list[str]:
+    """Alle egenskapskolonner med data, minus PANEL_EGENSKAPER_AV (config)."""
+    from src.config import PANEL_EGENSKAPER_AV
+
+    av = PANEL_EGENSKAPER_AV if av is None else av
+    return [c for c in df.columns if c not in IKKE_EGENSKAP and c != "region" and c not in av and df[c].notna().any()]
 
 
 class _Modell:

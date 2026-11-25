@@ -37,9 +37,13 @@ def lag(con, na: datetime | None = None) -> dict:
                for r in ot.ko_nyheter(con) if (r["publisert"] or "") >= fra_m]
     rapporter = [{k: r[k] for k in ("group_id", "url", "slug", "publisert", "tittel")}
                  for r in ot.ko_rapporter(con) if (r["publisert"] or "") >= fra_r]
+    from src.sources import medier
+
+    navn = dict(con.execute("SELECT slug, navn FROM selskaper"))
+    medie = [{**r, "navn": navn.get(r["slug"]), "nokkel": f"{r['url']}|{r['slug']}"} for r in medier.tone_ko(con)]
     nyest = lambda liste: sorted(liste, key=lambda r: r["publisert"] or "", reverse=True)  # noqa: E731
     return {"laget": na.isoformat(timespec="seconds"), "innside": nyest(innside),
-            "nyheter": nyest(nyheter), "rapporter": nyest(rapporter)}
+            "nyheter": nyest(nyheter), "rapporter": nyest(rapporter), "medier": medie[:300]}
 
 
 def main() -> int:
@@ -56,7 +60,8 @@ def main() -> int:
         ko = lag(con)
     FIL.parent.mkdir(parents=True, exist_ok=True)
     FIL.write_text(json.dumps(ko, ensure_ascii=False), encoding="utf-8")
-    print(f"Arbeidskø: {len(ko['innside'])} innside, {len(ko['nyheter'])} nyheter, {len(ko['rapporter'])} rapporter.")
+    print(f"Arbeidskø: {len(ko['innside'])} innside, {len(ko['nyheter'])} nyheter, {len(ko['rapporter'])} rapporter, "
+          f"{len(ko['medier'])} medieomtaler.")
     return 0
 
 

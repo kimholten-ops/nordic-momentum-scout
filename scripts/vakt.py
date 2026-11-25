@@ -7,6 +7,7 @@ hverdager kl. 07:55 og når du logger inn. Hvert annet minutt:
    — en liten fil, ikke hele databasen.
 2. Tolker det som ikke er gjort: innsidemeldinger først, så børsmeldinger,
    så nye kvartalsrapporter.
+   Til slutt tonen i medieomtaler (src/medietone.py).
 3. Pusher svarene til grenen «ollama-tolkninger». Neste nyhetsrunde i GitHub
    (hvert 10. minutt) legger dem inn, kjører hjernen og sender varsler.
 
@@ -85,6 +86,7 @@ KOER = [  # (navn i arbeidskøen, fil, nøkkel, tolkefunksjon, kort tekst)
     ("innside", ot.UT, "url", ot.tolk_innside_rad, "innsidemelding"),
     ("nyheter", ot.UT_KL, "url", ot.tolk_nyhet_rad, "børsmelding"),
     ("rapporter", ot.UT_RAP, "group_id", ot.tolk_rapport_rad, "rapport"),
+    ("medier", ot.UT_MED, "nokkel", ot.tolk_medie_rad, "medieomtale"),
 ]
 
 
@@ -97,6 +99,9 @@ def _oppsummer(navn: str, rad: dict) -> str:
     res = rad.get("resultat") or {}
     if navn == "nyheter":
         return f"{res.get('kategori')}/{res.get('retning')}"
+    if navn == "medier":
+        return ("ikke relevant" if not res.get("relevant") else
+                {1: "positiv", -1: "negativ"}.get(res.get("tone"), "nøytral"))
     return f"{res.get('periode') or '?'}, utsikter {res.get('utsikter', '?')}"
 
 

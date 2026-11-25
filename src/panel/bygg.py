@@ -9,6 +9,8 @@ Ingen fremtidsinformasjon i egenskapene:
 - kurs/volum til og med dag t (sluttkurs),
 - rapporter, innsidehandler, emisjoner med publiseringstid før kl. 17:30 dag t,
 - short med dato før dag t.
+- råvarer/valuta og amerikanske bransjer: bare kurser fra dager FØR dag t
+  (de handles til langt på kveld, etter nordisk stengning).
 Fasit: kjøp på åpning dag t+1, salg på slutt dag t+H, pluss utbytte, minus
 børsindeksen samme periode (+ anslått indeksutbytte) og kostnad tur/retur.
 """
@@ -32,6 +34,15 @@ MIN_HISTORIKK = 260   # handelsdager før første rad (12-mnd momentum)
 SLUTT_DAG = "17:30:00"
 
 KATEGORISKE = ["marked", "sektor"]
+
+# Yahoos sektornavn (nordiske aksjer) -> sektorene i universe/usa.csv.
+YAHOO_TIL_USA = {"Technology": "Technology", "Industrials": "Industrials", "Financial Services": "Finance",
+                 "Healthcare": "Health Care", "Consumer Cyclical": "Consumer Discretionary",
+                 "Consumer Defensive": "Consumer Staples", "Energy": "Energy", "Basic Materials": "Basic Materials",
+                 "Real Estate": "Real Estate", "Utilities": "Utilities", "Communication Services": "Telecommunications"}
+RAV_VINDU = 104    # uker for å måle følsomhet mot råvarer/valuta
+RAV_MIN_UKER = 52
+RAV_RIDGE = 0.1    # krymping (andel av antall uker) i regresjonen
 
 
 KURTASJE_USA = 0.0015  # antatt kurtasje per side for amerikanske aksjer (andel); juster ved behov
@@ -100,9 +111,94 @@ def last_data(con) -> dict:
     if fil.exists():
         with fil.open(encoding="utf-8") as fh:
             usa = {r["symbol"]: r for r in csv.DictReader(fh)}
+    # Første dato med shortdata per børs (Norge fra 2024, Finland/Sverige lenger).
+    yahoo_for_isin = {}
+    for r in con.execute("SELECT i.isin, s.yahoo FROM selskap_isin i JOIN selskaper s ON s.slug = i.slug "
+                         "WHERE s.yahoo LIKE '%.%'") if "selskap_isin" in tab else []:
+        yahoo_for_isin.setdefault(r[0], r[1])
+    short_start: dict[str, str] = {}
+    for i, (ds, _) in short.items():
+        suf = marked.suffiks(yahoo_for_isin.get(i, "")) if i in yahoo_for_isin else None
+        if suf and ds and (suf not in short_start or ds[0] < short_start[suf]):
+            short_start[suf] = ds[0]
+    from src.sources import faktorer
+
     return {"kurser": kurser, "slug": sel, "usa": usa, "slugs_for": slugs_for, "hend": hend, "innside": innside,
-            "isin": isin, "short": short, "info": info, "rapporter": rapporter,
-            "short_start": min((d[0] for d, _ in short.values() if d), default=None)}
+            "isin": isin, "short": short, "info": info, "rapporter": rapporter, "short_start": short_start,
+            "faktorer": faktorer.last(con), "usa_sektor": _usa_sektorer(kurser, usa)}
+
+
+def _usa_sektorer(kurser: dict, usa: dict) -> dict[str, tuple[list[str], np.ndarray]]:
+    """Likevektet meravkastning mot S&P 500 per amerikansk sektor, kumulativ (logg)."""
+    spx = kurser.get("^GSPC")
+    if not spx or not usa:
+        return {}
+    sl = pd.Series(np.log(_np(spx.close)), index=spx.datoer).diff()
+    per: dict[str, list[pd.Series]] = defaultdict(list)
+    for sym, r in usa.items():
+        s = kurser.get(sym)
+        if s and r.get("sektor") and len(s.datoer) > 300:
+            x = pd.Series(np.log(_np(s.close)), index=s.datoer).diff()
+            per[r["sektor"]].append((x - sl.reindex(x.index)).clip(-0.25, 0.25))
+    ut = {}
+    for sek, liste in per.items():
+        if len(liste) >= 5:
+            m = pd.concat(liste, axis=1).mean(axis=1, skipna=True).sort_index().fillna(0.0)
+            ut[sek] = (list(m.index), np.cumsum(m.to_numpy()))
+    return ut
+
+
+def _for(ds: list[str], vs, d: str):
+    """Siste verdi med dato strengt før d (None hvis ingen)."""
+    k = bisect_left(ds, d) - 1
+    return vs[k] if k >= 0 else None
+
+
+def _ravarer(s: marked.Serie, ic: np.ndarray, faktorer: dict) -> dict[str, dict]:
+    """Per ukedato: følsomhet mot råvarer/valuta (ridge på ukeavkastning siste
+    RAV_VINDU uker) og hva faktorbevegelsene tilsier for aksjen nå."""
+    if not faktorer:
+        return {}
+    koder = sorted(faktorer)
+    uker = _ukedager(s.datoer)
+    pos = {d: i for i, d in enumerate(s.datoer)}
+    c = np.array([s.close[pos[d]] or np.nan for d in uker], dtype=float)
+    ix = np.array([ic[pos[d]] for d in uker], dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        y = np.diff(np.log(c), prepend=np.nan) - np.diff(np.log(ix), prepend=np.nan)
+        F = np.array([[_for(*faktorer[k], d) or np.nan for k in koder] for d in uker], dtype=float)
+        X = np.diff(np.log(F), axis=0, prepend=np.full((1, len(koder)), np.nan))
+    ut = {}
+    for i in range(RAV_MIN_UKER, len(uker)):
+        a = max(1, i - RAV_VINDU + 1)
+        Xw, yw = X[a:i + 1], y[a:i + 1]
+        kol = np.isfinite(Xw).mean(axis=0) >= 0.8
+        if kol.sum() < 3:
+            continue
+        rad = np.isfinite(yw) & np.isfinite(Xw[:, kol]).all(axis=1)
+        if rad.sum() < RAV_MIN_UKER:
+            continue
+        Xk, yk = Xw[rad][:, kol], yw[rad]
+        mu, sd = Xk.mean(axis=0), Xk.std(axis=0)
+        sd[sd == 0] = 1
+        Z = (Xk - mu) / sd
+        n = len(yk)
+        bz = np.linalg.solve(Z.T @ Z + RAV_RIDGE * n * np.eye(Z.shape[1]), Z.T @ (yk - yk.mean()))
+        b = bz / sd
+        rest = yk - yk.mean() - Z @ bz
+        sst = ((yk - yk.mean()) ** 2).sum()
+        r2 = 1 - (rest ** 2).sum() / sst if sst > 0 else np.nan
+
+        def bev(j):
+            if j < 0 or not np.isfinite(F[i][kol]).all() or not np.isfinite(F[j][kol]).all():
+                return np.nan
+            return float(b @ (np.log(F[i][kol]) - np.log(F[j][kol])))
+
+        d1m, d1u = bev(i - 4), bev(i - 1)
+        faktisk = np.nansum(y[i - 3:i + 1]) if i >= 4 else np.nan
+        ut[uker[i]] = {"rav_driv_1m": d1m, "rav_driv_1u": d1u, "rav_r2": r2,
+                       "rav_gap_1m": d1m - faktisk if np.isfinite(d1m) and np.isfinite(faktisk) else np.nan}
+    return ut
 
 
 def _np(x) -> np.ndarray:
@@ -167,6 +263,9 @@ def bygg(data: dict, horisont: int = HORISONT, fra: str | None = None, med_fasit
         if er_usa:
             sektor = data["usa"][yahoo].get("sektor") or None
         fx = INNSIDE_FX_NOK.get(marked.VALUTA_ETTER_SUFFIKS.get(marked.suffiks(yahoo) or "", "NOK"), 1.0)
+        rav = {} if er_usa else _ravarer(s, ic, data.get("faktorer") or {})
+        usa_sek = None if er_usa else (data.get("usa_sektor") or {}).get(YAHOO_TIL_USA.get(sektor or "", ""))
+        short_fra = (data.get("short_start") or {}).get(marked.suffiks(yahoo) or "")
 
         for d in _ukedager(s.datoer[MIN_HISTORIKK:]):
             if fra and d < fra:
@@ -228,8 +327,24 @@ def bygg(data: dict, horisont: int = HORISONT, fra: str | None = None, med_fasit
             f["innside_kjopere_90"] = len({h[3] for h in kj})
             f["innside_kjop_30"] = sum(1 for h in kj if h[0] >= d30)
             f["innside_netto_mnok_90"] = (sum(h[2] for h in kj) - sum(h[2] for h in sa)) / 1e6
-            # --- Short (Oslo)
-            if marked.suffiks(yahoo) == ".OL" and data["short_start"] and d > data["short_start"]:
+            # --- Råvarer og valuta (bare nordiske aksjer)
+            if d in rav:
+                f.update(rav[d])
+            # --- Amerikanske bransjefeller: meravkastning mot S&P 500 til og med dagen før
+            if usa_sek:
+                ds_u, cum = usa_sek
+                d7 = (date.fromisoformat(d) - timedelta(days=7)).isoformat()
+                d28 = (date.fromisoformat(d) - timedelta(days=28)).isoformat()
+                n0, n7, n28 = _for(ds_u, cum, d), _for(ds_u, cum, d7), _for(ds_u, cum, d28)
+                if n0 is not None and n7 is not None:
+                    f["usa_sektor_1u"] = float(n0 - n7)
+                if n0 is not None and n28 is not None:
+                    f["usa_sektor_1m"] = float(n0 - n28)
+                    if t >= 21 and np.isfinite(ic[t]) and np.isfinite(ic[t - 21]) and ic[t - 21] > 0 and c[t - 21] > 0:
+                        egen = math.log(c[t] / c[t - 21]) - math.log(ic[t] / ic[t - 21])
+                        f["usa_gap_1m"] = f["usa_sektor_1m"] - egen
+            # --- Short (Oslo, Helsingfors, Stockholm)
+            if short_fra and d > short_fra:
                 sp = 0.0
                 for isin in isiner:
                     ds, ps = data["short"].get(isin, ([], []))

@@ -50,6 +50,7 @@ UT = ROOT / "data" / "ollama" / "tolkninger.jsonl"
 UT_KL = ROOT / "data" / "ollama" / "klassifiseringer.jsonl"
 UT_RAP = ROOT / "data" / "ollama" / "rapporter.jsonl"
 UT_TEST = ROOT / "data" / "ollama" / "modelltest.jsonl"
+UT_MED = ROOT / "data" / "ollama" / "medier.jsonl"
 
 
 def ko(con) -> list[dict]:
@@ -163,6 +164,21 @@ def tolk_rapport_rad(r: dict) -> dict:
     return rad
 
 
+def tolk_medie_rad(r: dict) -> dict:
+    """Tone i én medieomtale for ett selskap -> rad til medier.jsonl. Kaster OllamaNede."""
+    from src import medietone
+
+    rad = {"nokkel": r["nokkel"], "url": r["url"], "slug": r["slug"], "modell": OLLAMA_MODELL,
+           "tid": datetime.now().isoformat(timespec="seconds")}
+    try:
+        rad["resultat"] = medietone.tolk(r.get("navn") or r["slug"], r["tittel"], r.get("ingress"))
+    except Exception as e:  # noqa: BLE001
+        if _nede(e):
+            raise OllamaNede(str(e)) from e
+        rad["feil"] = f"{type(e).__name__}: {e}"[:300]
+    return rad
+
+
 def tolk_rapporter(maks: int | None, push_hver: int) -> int:
     from src import rapport
 
@@ -211,7 +227,7 @@ def ferdige(fil: Path = UT, nokkel: str = "url", versjon: str | None = None) -> 
 
 GREN = "ollama-tolkninger"
 I_GREN = ("data/ollama/tolkninger.jsonl", "data/ollama/klassifiseringer.jsonl", "data/ollama/rapporter.jsonl",
-          "data/ollama/modelltest.jsonl")
+          "data/ollama/modelltest.jsonl", "data/ollama/medier.jsonl")
 
 
 def git(*args: str, env: dict | None = None) -> str | None:
@@ -231,7 +247,7 @@ def push(antall: int) -> None:
     env = {"GIT_INDEX_FILE": indeks}
     if git("read-tree", "--empty", env=env) is None:
         return
-    for lokal, i_gren in zip((UT, UT_KL, UT_RAP, UT_TEST), I_GREN):
+    for lokal, i_gren in zip((UT, UT_KL, UT_RAP, UT_TEST, UT_MED), I_GREN, strict=True):
         if not lokal.exists():
             continue
         blob = git("hash-object", "-w", str(lokal))

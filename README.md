@@ -106,6 +106,24 @@ forsinket) for ASK-aksjene. Kandidatene får kjøpsgrense og stopp fra siste
 kurs og kursreaksjonen etter meldingen; åpne papirhandler gir varsel når
 stoppen nås og påminnelse kl. 15:30 på planlagt salgsdag.
 
+## Råvarer, USA-bransjer, nordisk short og medieomtale
+
+- `src/sources/faktorer.py`: Brent, gass (TTF/Henry Hub), aluminium, kobber,
+  gull, tørrbulkfrakt, USD/NOK, EUR/NOK, USD/SEK, amerikansk 10-årsrente (Yahoo)
+  og laksepris per uke (SSB 03024). Panelet regner ut hver aksjes følsomhet
+  (ridge på ukeavkastning, 2 år) og etterslep mot faktorbevegelsene.
+- Amerikanske bransjefeller: likevektet meravkastning per sektor i USA-universet.
+- `src/sources/short_norden.py`: offentlige shortposisjoner i Sverige (FI) og
+  Finland (FIN-FSA), summert per aksje og dag inn i `short`.
+- Test 25.11.2026 (`python -m scripts.test_egenskaper`): råvarer/valuta og
+  USA-bransje ga ingen sikker forbedring (ΔIC −0,005 til +0,004 over fire
+  frø), så de står i `PANEL_EGENSKAPER_AV`. Short i Helsingfors/Stockholm er
+  nøytral i modellen og har samme fortegn som Oslo alene, så den brukes.
+- `src/sources/medier.py` (hver nyhetsrunde): overskrifter fra DN, DI,
+  Kauppalehti og Børsen, Google Nyheter-søk per selskap (roterer) og Google
+  Trends. Vakten på PC-en vurderer tonen (`src/medietone.py`). Brukes ikke av
+  modellene ennå; samles for å kunne testes når det finnes noen måneders historikk.
+
 ## Faktormodellen / aksjescore (src/panel/)
 
 Gir hver aksje (Norden + ca. 500 amerikanske i `universe/usa.csv`) en score
