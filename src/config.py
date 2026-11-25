@@ -182,6 +182,14 @@ HJERNE_EGENSKAPER_AV = [x for x in env(
 # Faktormodellen (src/panel/): kandidater i Norden med aksjescore i nederste
 # tredjedel filtreres bort. Test 2024–26: innsidekjøp i svakeste tredjedel
 # ga -2,5 % mot børsen på 20 d, sterkeste tredjedel -0,1 %.
+# Egenskaper faktormodellen ikke skal bruke (testet uten gevinst, se
+# scripts/test_egenskaper.py). Kommaseparert i miljøvariabelen.
+# Råvarer/valuta og USA-bransje ble testet 25.11.2026 uten sikker gevinst
+# (ΔIC −0,005 til +0,004 over fire frø, t < 1). Dataene samles fortsatt inn.
+PANEL_EGENSKAPER_AV = [x for x in env(
+    "PANEL_EGENSKAPER_AV",
+    "rav_driv_1m,rav_driv_1u,rav_gap_1m,rav_r2,usa_sektor_1u,usa_sektor_1m,usa_gap_1m",
+).split(",") if x]
 PANEL_FILTER_PERSENTIL = float(env("PANEL_FILTER_PERSENTIL", "0.333"))
 
 # Regelsjekk (enkel, gjennomsiktig strategi ved siden av modellen): likvid,

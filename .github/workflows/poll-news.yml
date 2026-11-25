@@ -88,6 +88,10 @@ jobs:
           HJERNE_VARSLE: ${{ vars.HJERNE_VARSLE || '1' }}
         run: python -m src.hjerne_kjor
 
+      - name: Medieomtale og søketrender (samles inn, brukes ikke ennå)
+        continue-on-error: true
+        run: python -m src.sources.medier
+
       - name: Arbeidskø til vakten på PC-en
         continue-on-error: true
         env:
