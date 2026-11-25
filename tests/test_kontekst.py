@@ -165,3 +165,44 @@ def test_euronext_fyller_bare_bakover_naar_kursene_stemmer(tmp_path):
     con.execute("INSERT INTO kurser (yahoo,dato,close) VALUES ('Y.OL','2025-01-03',5.0)")
     assert euronext.fyll(con, "Y.OL", rader) == ("avvik ved overgang", 0)
     assert euronext.fyll(con, "Z.OL", rader) == ("hele serien", 2)
+
+
+def test_db_lagring_bytter_navn_etter_opplasting(tmp_path, monkeypatch):
+    """Ny fil lastes opp først; gjeldende blir forrige og ny blir gjeldende."""
+    import sqlite3
+    import subprocess
+
+    from scripts import db_lagring as d
+
+    vedlegg = {"momentum.db.gz": 1, "momentum-forrige.db.gz": 2}
+    kall = []
+
+    def gh(*args, sjekk=True):
+        kall.append(("gh", args[:2]))
+        if args[:2] == ("release", "upload"):
+            vedlegg["momentum-ny.db.gz"] = 3
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    def api(*args):
+        if args[0] == "-X" and args[1] == "DELETE":
+            i = int(args[2].rsplit("/", 1)[1])
+            for k in [k for k, v in vedlegg.items() if v == i]:
+                del vedlegg[k]
+        elif args[0] == "-X" and args[1] == "PATCH":
+            i = int(args[2].rsplit("/", 1)[1])
+            navn = args[4].split("=", 1)[1]
+            gammel = next(k for k, v in vedlegg.items() if v == i)
+            vedlegg[navn] = vedlegg.pop(gammel)
+        out = "\n".join(f"{k}\t{v}" for k, v in vedlegg.items())
+        return subprocess.CompletedProcess(args, 0, out, "")
+
+    db = tmp_path / "m.db"
+    sqlite3.connect(db).close()
+    monkeypatch.setattr(d, "_har_gh", lambda: True)
+    monkeypatch.setattr(d, "_release_finnes", lambda: True)
+    monkeypatch.setattr(d, "_gh", gh)
+    monkeypatch.setattr(d, "_api", api)
+    monkeypatch.setattr(d, "TMP", tmp_path / "t")
+    monkeypatch.setattr(d.time, "sleep", lambda s: None)
+    assert d.last_opp(db) == 0
+    assert vedlegg == {"momentum-forrige.db.gz": 1, "momentum.db.gz": 3}
