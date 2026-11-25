@@ -31,6 +31,10 @@ from src.config import HTTP_TIMEOUT, TELEGRAM_CHAT_ID, TELEGRAM_TOKEN, env
 
 WEBPUSH_VAPID_PRIVATE = env("WEBPUSH_VAPID_PRIVATE", "")
 WEBPUSH_SUBSCRIPTIONS = env("WEBPUSH_SUBSCRIPTIONS", "")
+# Andre personers telefoner: egen secret, så din egen ikke må skrives om
+# (GitHub viser ikke innholdet i en lagret secret). Lim inn teksten fra
+# 🔔 Varsler i appen, én per linje.
+WEBPUSH_SUBSCRIPTIONS_EKSTRA = env("WEBPUSH_SUBSCRIPTIONS_EKSTRA", "")
 _STANDARD_KONTAKT = "mailto:momentum@example.invalid"
 
 
@@ -86,16 +90,36 @@ def _telegram(tekst: str, stille: bool) -> bool:
     return r.ok
 
 
+def les_abonnementer(tekst: str) -> list[dict]:
+    """Godtar ett objekt, en liste, eller flere objekter etter hverandre
+    (f.eks. ett per linje). Ugyldige biter hoppes over med en melding."""
+    ut: list[dict] = []
+    dek = json.JSONDecoder()
+    i, n = 0, len(tekst)
+    while i < n:
+        while i < n and tekst[i] in " \t\r\n,":
+            i += 1
+        if i >= n:
+            break
+        try:
+            obj, i = dek.raw_decode(tekst, i)
+        except ValueError:
+            print(f"[notify] klarte ikke lese et web push-abonnement (tegn {i}); hopper over resten")
+            break
+        for o in obj if isinstance(obj, list) else [obj]:
+            if isinstance(o, dict) and o.get("endpoint") and o not in ut:
+                ut.append(o)
+    return ut
+
+
 def _abonnementer() -> list[dict]:
-    if not WEBPUSH_SUBSCRIPTIONS.strip():
-        return []
-    data = json.loads(WEBPUSH_SUBSCRIPTIONS)
-    return data if isinstance(data, list) else [data]
+    return les_abonnementer(WEBPUSH_SUBSCRIPTIONS) + [
+        a for a in les_abonnementer(WEBPUSH_SUBSCRIPTIONS_EKSTRA) if a not in les_abonnementer(WEBPUSH_SUBSCRIPTIONS)]
 
 
 def _webpush(tittel: str, tekst: str, url: str | None) -> int:
     """Sender til alle lagrede abonnementer. Returnerer antall levert."""
-    if not (WEBPUSH_VAPID_PRIVATE and WEBPUSH_SUBSCRIPTIONS):
+    if not (WEBPUSH_VAPID_PRIVATE and (WEBPUSH_SUBSCRIPTIONS or WEBPUSH_SUBSCRIPTIONS_EKSTRA)):
         return 0
     from pywebpush import WebPushException, webpush
 
@@ -177,7 +201,7 @@ def test() -> int:
                       "eller du har ikke sendt boten en melding ennå.")
                 feil += 1
     print("== Web push")
-    if not (WEBPUSH_VAPID_PRIVATE and WEBPUSH_SUBSCRIPTIONS):
+    if not (WEBPUSH_VAPID_PRIVATE and (WEBPUSH_SUBSCRIPTIONS or WEBPUSH_SUBSCRIPTIONS_EKSTRA)):
         print("  – ikke satt opp (valgfritt): WEBPUSH_VAPID_PRIVATE og WEBPUSH_SUBSCRIPTIONS")
     else:
         try:

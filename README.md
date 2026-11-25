@@ -193,7 +193,9 @@ med repo-variabler med samme navn som i `src/config.py`.
 2. Kjør «Dashboard (GitHub Pages)». Åpne dashboardet på telefonen. iPhone:
    Del → «Legg til på Hjem-skjerm» og åpne appen derfra (krever iOS 16.4+).
 3. Trykk 🔔 Varsler → tillat → kopier teksten → secret `WEBPUSH_SUBSCRIPTIONS`.
-   Flere enheter: `[ {...}, {...} ]`.
+   Andre personer gjør det samme på sin telefon og sender deg teksten; den
+   legges i secreten `WEBPUSH_SUBSCRIPTIONS_EKSTRA`, én tekst per linje (da
+   slipper du å skrive om din egen secret, som GitHub ikke viser innholdet i).
 4. Kjør «Varslingstest».
 
 Web push brukes bare for kjøpsforslag; Telegram får også feil og ukesrapport.
