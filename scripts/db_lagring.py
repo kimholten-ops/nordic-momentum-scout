@@ -47,6 +47,11 @@ def _gh(*args: str, sjekk: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(["gh", *args, "--repo", REPO], capture_output=True, text=True, check=sjekk)
 
 
+def _api(*args: str) -> subprocess.CompletedProcess:
+    """gh api (tar ikke --repo; stien inneholder repoet)."""
+    return subprocess.run(["gh", "api", *args], capture_output=True, text=True, check=False)
+
+
 def _har_gh() -> bool:
     return bool(shutil.which("gh") and (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")))
 
@@ -132,19 +137,18 @@ def hent(mål: Path = DB_PATH) -> int:
 
 def _vedlegg() -> dict[str, int]:
     """Navn -> id for vedleggene på releasen (REST)."""
-    r = _gh("api", f"repos/{REPO}/releases/tags/{TAG}", "--jq", ".assets[] | [.name, .id] | @tsv", sjekk=False)
+    r = _api(f"repos/{REPO}/releases/tags/{TAG}", "--jq", ".assets[] | [.name, .id] | @tsv")
     if r.returncode:
         raise RuntimeError(f"fikk ikke listet vedleggene: {r.stderr[:200]}")
     return {navn: int(i) for navn, i in (linje.split("\t") for linje in r.stdout.splitlines() if "\t" in linje)}
 
 
 def _gi_navn(asset_id: int, navn: str) -> bool:
-    return _gh("api", "-X", "PATCH", f"repos/{REPO}/releases/assets/{asset_id}", "-f", f"name={navn}",
-               sjekk=False).returncode == 0
+    return _api("-X", "PATCH", f"repos/{REPO}/releases/assets/{asset_id}", "-f", f"name={navn}").returncode == 0
 
 
 def _slett(asset_id: int) -> bool:
-    return _gh("api", "-X", "DELETE", f"repos/{REPO}/releases/assets/{asset_id}", sjekk=False).returncode == 0
+    return _api("-X", "DELETE", f"repos/{REPO}/releases/assets/{asset_id}").returncode == 0
 
 
 def last_opp(kilde: Path = DB_PATH) -> int:
@@ -166,8 +170,11 @@ def last_opp(kilde: Path = DB_PATH) -> int:
     ny = TMP / NY
     shutil.copyfile(gz, ny)
     for forsok in range(4):
-        if _gh("release", "upload", TAG, str(ny), "--clobber", sjekk=False).returncode == 0 and NY in _vedlegg():
-            break
+        try:
+            if _gh("release", "upload", TAG, str(ny), "--clobber", sjekk=False).returncode == 0 and NY in _vedlegg():
+                break
+        except RuntimeError as e:
+            print(f"Opplasting: {e}", file=sys.stderr)
         time.sleep(15 * (forsok + 1))
     else:
         print("FEIL: opplasting feilet (gjeldende database er urørt).", file=sys.stderr)
